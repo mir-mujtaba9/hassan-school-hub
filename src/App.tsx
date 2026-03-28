@@ -9,6 +9,9 @@ import Login from "@/pages/Login";
 import StudentAdmission from "@/pages/StudentAdmission";
 import StudentsList from "@/pages/StudentsList";
 import FeeCollection from "@/pages/FeeCollection";
+import StaffSalary from "@/pages/StaffSalary";
+import Expenses from "@/pages/Expenses";
+import BalanceSheet from "@/pages/BalanceSheet";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -29,6 +32,9 @@ const AppRoutes = () => {
       <Route path="/edit/:id" element={<ProtectedRoute><StudentAdmission /></ProtectedRoute>} />
       <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
       <Route path="/fees" element={<ProtectedRoute><FeeCollection /></ProtectedRoute>} />
+      <Route path="/staff" element={<ProtectedRoute><StaffSalary /></ProtectedRoute>} />
+      <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+      <Route path="/balance" element={<ProtectedRoute><BalanceSheet /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
