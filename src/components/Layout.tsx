@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, Users, DollarSign, LogOut, Menu, X } from 'lucide-react';
+import { UserPlus, Users, DollarSign, LogOut, Menu, X, UserCheck, FileText, BarChart3 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import schoolLogo from '@/assets/school-logo.png';
 
@@ -8,12 +8,18 @@ const menuItems = [
   { title: 'Student Admission', path: '/admission', icon: UserPlus },
   { title: 'Students', path: '/students', icon: Users },
   { title: 'Fee Collection', path: '/fees', icon: DollarSign },
+  { title: 'Staff & Salary', path: '/staff', icon: UserCheck },
+  { title: 'Expenses', path: '/expenses', icon: FileText },
+  { title: 'Balance Sheet', path: '/balance', icon: BarChart3 },
 ];
 
 const pageTitles: Record<string, string> = {
   '/admission': 'New Student Admission',
   '/students': 'Students',
   '/fees': 'Fee Collection',
+  '/staff': 'Staff & Salary',
+  '/expenses': 'Expenses',
+  '/balance': 'Balance Sheet',
 };
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
