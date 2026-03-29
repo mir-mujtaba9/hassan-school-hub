@@ -9,7 +9,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const { setIsLoggedIn, setUserRole } = useAppContext();
+  const { setIsLoggedIn, setUserRole, setUserName } = useAppContext();
   const navigate = useNavigate();
 
   const handleLogin = (e: React.FormEvent) => {
@@ -17,11 +17,13 @@ const Login: React.FC = () => {
     if (email === 'admin@hassan.edu' && password === 'admin123') {
       setIsLoggedIn(true);
       setUserRole('admin');
+      setUserName('Muhammad Hassan');
       navigate('/admission');
     } else if (email === 'teacher@hassan.edu' && password === 'teacher123') {
       setIsLoggedIn(true);
       setUserRole('teacher');
-      navigate('/admission');
+      setUserName('Ayesha Siddiq');
+      navigate('/students');
     } else {
       setError('Invalid email or password');
     }

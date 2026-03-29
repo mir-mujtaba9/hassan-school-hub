@@ -7,8 +7,9 @@ import { Eye, Pencil, Trash2, Search, Plus, X, ChevronLeft, ChevronRight, Users,
 const ITEMS_PER_PAGE = 10;
 
 const StudentsList: React.FC = () => {
-  const { students, setStudents, feeRecords } = useAppContext();
+  const { students, setStudents, feeRecords, userRole } = useAppContext();
   const navigate = useNavigate();
+  const isTeacher = userRole === 'teacher';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
@@ -52,6 +53,13 @@ const StudentsList: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Teacher info banner */}
+      {isTeacher && (
+        <div className="bg-muted border border-border rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2">
+          <span className="text-muted-foreground text-sm">ℹ️ You have view-only access to student records</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
@@ -68,9 +76,11 @@ const StudentsList: React.FC = () => {
             <option>Active</option>
             <option>Left</option>
           </select>
-          <button onClick={() => navigate('/admission')} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors whitespace-nowrap">
-            <Plus size={16} /> New Admission
-          </button>
+          {!isTeacher && (
+            <button onClick={() => navigate('/admission')} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors whitespace-nowrap">
+              <Plus size={16} /> New Admission
+            </button>
+          )}
         </div>
       </div>
 
@@ -108,7 +118,24 @@ const StudentsList: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {paged.map((s, i) => (
+              {paged.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                        <Search size={24} className="text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">No records match your search</p>
+                      <p className="text-xs text-muted-foreground">Try adjusting your filters or search term</p>
+                      {(search || statusFilter !== 'All') && (
+                        <button onClick={() => { setSearch(''); setStatusFilter('All'); }} className="mt-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
+                          Reset Filters
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : paged.map((s, i) => (
                 <tr key={s.id} className="border-b border-border hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 text-muted-foreground">{(page - 1) * ITEMS_PER_PAGE + i + 1}</td>
                   <td className="px-4 py-3 font-medium text-foreground">{s.fullName}</td>
@@ -137,8 +164,12 @@ const StudentsList: React.FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => { setViewStudent(s); setViewTab('personal'); }} className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="View"><Eye size={16} /></button>
-                      <button onClick={() => navigate(`/edit/${s.id}`)} className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Edit"><Pencil size={16} /></button>
-                      <button onClick={() => setDeleteTarget(s)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Delete"><Trash2 size={16} /></button>
+                      {!isTeacher && (
+                        <>
+                          <button onClick={() => navigate(`/edit/${s.id}`)} className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Edit"><Pencil size={16} /></button>
+                          <button onClick={() => setDeleteTarget(s)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Delete"><Trash2 size={16} /></button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -149,7 +180,7 @@ const StudentsList: React.FC = () => {
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-          <p className="text-sm text-muted-foreground">Showing {(page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} students</p>
+          <p className="text-sm text-muted-foreground">Showing {filtered.length === 0 ? 0 : (page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} students</p>
           <div className="flex items-center gap-2">
             <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="p-1.5 border border-input rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"><ChevronLeft size={16} /></button>
             <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="p-1.5 border border-input rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"><ChevronRight size={16} /></button>
