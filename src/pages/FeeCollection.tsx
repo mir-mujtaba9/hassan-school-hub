@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { formatRs, formatDate, generateReceiptNumber, MONTHS, FeeRecord } from '@/data/students';
-import { Plus, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle } from 'lucide-react';
+import { formatRs, formatDate, generateReceiptNumber, MONTHS, FeeRecord, CLASS_OPTIONS } from '@/data/students';
+import { Plus, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle, Search, RotateCcw } from 'lucide-react';
 
 const FEE_STRUCTURE_SUMMARY = [
   { cls: 'Nursery', students: 3, stdFee: 800, avgFee: 800 },
@@ -13,8 +13,9 @@ const FEE_STRUCTURE_SUMMARY = [
 ];
 
 const FeeCollection: React.FC = () => {
-  const { students, feeRecords, setFeeRecords } = useAppContext();
+  const { students, feeRecords, setFeeRecords, userRole } = useAppContext();
   const activeStudents = students.filter(s => s.status === 'Active');
+  const isTeacher = userRole === 'teacher';
 
   const [selectedMonth, setSelectedMonth] = useState('March');
   const [selectedYear, setSelectedYear] = useState(2025);
@@ -31,17 +32,54 @@ const FeeCollection: React.FC = () => {
   const [lastReceipt, setLastReceipt] = useState({ name: '', amount: 0, balance: 0, receipt: '' });
   const [isBalancePayment, setIsBalancePayment] = useState(false);
 
-  const currentRecords = useMemo(() => {
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [classFilter, setClassFilter] = useState('All Classes');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+
+  const allRecordsForMonth = useMemo(() => {
     return feeRecords.filter(r => r.month === selectedMonth && r.year === selectedYear);
   }, [feeRecords, selectedMonth, selectedYear]);
 
+  const currentRecords = useMemo(() => {
+    return allRecordsForMonth.filter(r => {
+      const student = students.find(s => s.id === r.studentId);
+      if (!student) return false;
+      // Search filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!student.fullName.toLowerCase().includes(q) && !student.fatherName.toLowerCase().includes(q)) return false;
+      }
+      // Class filter
+      if (classFilter !== 'All Classes' && student.studentClass !== classFilter) return false;
+      // Status filter
+      if (statusFilter !== 'All Status' && r.status !== statusFilter) return false;
+      return true;
+    });
+  }, [allRecordsForMonth, students, searchQuery, classFilter, statusFilter]);
+
   const stats = useMemo(() => {
-    const expected = currentRecords.reduce((s, r) => s + r.monthlyFee, 0);
-    const collected = currentRecords.reduce((s, r) => s + r.paidAmount, 0);
-    const outstanding = currentRecords.filter(r => r.status === 'Unpaid').reduce((s, r) => s + r.totalDue, 0);
-    const pending = currentRecords.filter(r => r.status === 'Partial').reduce((s, r) => s + r.balanceRemaining, 0);
+    const expected = allRecordsForMonth.reduce((s, r) => s + r.monthlyFee, 0);
+    const collected = allRecordsForMonth.reduce((s, r) => s + r.paidAmount, 0);
+    const outstanding = allRecordsForMonth.filter(r => r.status === 'Unpaid').reduce((s, r) => s + r.totalDue, 0);
+    const pending = allRecordsForMonth.filter(r => r.status === 'Partial').reduce((s, r) => s + r.balanceRemaining, 0);
     return { expected, collected, outstanding, pending };
+  }, [allRecordsForMonth]);
+
+  const filteredStatusCounts = useMemo(() => {
+    const paid = currentRecords.filter(r => r.status === 'Paid').length;
+    const partial = currentRecords.filter(r => r.status === 'Partial').length;
+    const unpaid = currentRecords.filter(r => r.status === 'Unpaid').length;
+    return { paid, partial, unpaid };
   }, [currentRecords]);
+
+  const hasActiveFilters = searchQuery || classFilter !== 'All Classes' || statusFilter !== 'All Status';
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setClassFilter('All Classes');
+    setStatusFilter('All Status');
+  };
 
   const selectedStudent = students.find(s => s.id === paymentStudentId);
   const existingRecord = feeRecords.find(r => r.studentId === paymentStudentId && r.month === paymentMonth && r.year === paymentYear);
@@ -120,6 +158,13 @@ const FeeCollection: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Teacher info banner */}
+      {isTeacher && (
+        <div className="bg-muted border border-border rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2">
+          <span className="text-muted-foreground text-sm">ℹ️ You have view-only access to fee records</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h1 className="text-xl font-bold text-foreground">Fee Collection</h1>
@@ -130,9 +175,11 @@ const FeeCollection: React.FC = () => {
           <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
             <option>2024</option><option>2025</option><option>2026</option>
           </select>
-          <button onClick={() => openPayment()} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
-            <Plus size={16} /> Record Payment
-          </button>
+          {!isTeacher && (
+            <button onClick={() => openPayment()} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
+              <Plus size={16} /> Record Payment
+            </button>
+          )}
         </div>
       </div>
 
@@ -151,6 +198,45 @@ const FeeCollection: React.FC = () => {
         ))}
       </div>
 
+      {/* Filter & Search Bar */}
+      <div className="bg-card rounded-xl border border-border p-4 mb-4">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none"
+              placeholder="Search student name or father name..."
+            />
+          </div>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
+              <option>All Classes</option>
+              {CLASS_OPTIONS.map(c => <option key={c}>{c}</option>)}
+            </select>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
+              <option>All Status</option>
+              <option>Paid</option>
+              <option>Partial</option>
+              <option>Unpaid</option>
+              <option>Advance</option>
+            </select>
+            {hasActiveFilters && (
+              <button onClick={resetFilters} className="flex items-center gap-1.5 px-3 py-2 bg-muted text-muted-foreground rounded-lg text-sm hover:bg-muted/80 transition-colors">
+                <RotateCcw size={14} /> Reset Filters
+              </button>
+            )}
+          </div>
+        </div>
+        {/* Results summary */}
+        <p className="text-xs text-muted-foreground mt-3">
+          Showing {currentRecords.length} of {allRecordsForMonth.length} students — {filteredStatusCounts.paid} Paid, {filteredStatusCounts.partial} Partial, {filteredStatusCounts.unpaid} Unpaid
+        </p>
+      </div>
+
       {/* Fee Table */}
       <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden mb-6">
         <div className="overflow-x-auto">
@@ -163,7 +249,24 @@ const FeeCollection: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {currentRecords.map((r, i) => {
+              {currentRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                        <Search size={24} className="text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">No records match your search</p>
+                      <p className="text-xs text-muted-foreground">Try adjusting your filters or search term</p>
+                      {hasActiveFilters && (
+                        <button onClick={resetFilters} className="mt-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
+                          Reset Filters
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : currentRecords.map((r, i) => {
                 const student = students.find(s => s.id === r.studentId);
                 if (!student) return null;
                 return (
@@ -178,14 +281,18 @@ const FeeCollection: React.FC = () => {
                     <td className="px-3 py-3"><span className={r.prevBalance > 0 ? 'text-warning font-medium' : 'text-muted-foreground'}>{formatRs(r.prevBalance)}</span></td>
                     <td className="px-3 py-3 font-medium text-foreground">{formatRs(r.totalDue)}</td>
                     <td className="px-3 py-3 text-foreground">{formatRs(r.paidAmount)}</td>
-                    <td className="px-3 py-3"><span className={r.balanceRemaining > 0 ? 'text-destructive font-medium' : 'text-foreground'}>{formatRs(r.balanceRemaining)}</span></td>
+                    <td className="px-3 py-3">
+                      <span className={r.balanceRemaining > 0 ? 'text-destructive font-bold' : 'text-muted-foreground'}>
+                        {formatRs(r.balanceRemaining)}
+                      </span>
+                    </td>
                     <td className="px-3 py-3">{statusBadge(r.status)}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1">
-                        {r.status === 'Unpaid' && (
+                        {!isTeacher && r.status === 'Unpaid' && (
                           <button onClick={() => openPayment(r.studentId)} className="px-2 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90 transition-colors">Collect Fee</button>
                         )}
-                        {r.status === 'Partial' && (
+                        {!isTeacher && r.status === 'Partial' && (
                           <button onClick={() => openPayment(r.studentId, true)} className="px-2 py-1 bg-warning text-warning-foreground rounded text-xs hover:bg-warning/90 transition-colors">Pay Balance</button>
                         )}
                         {r.status === 'Advance' && (
@@ -193,6 +300,9 @@ const FeeCollection: React.FC = () => {
                         )}
                         {r.receiptNumber && (
                           <button className="px-2 py-1 bg-muted text-muted-foreground rounded text-xs hover:bg-muted/80 transition-colors">Receipt</button>
+                        )}
+                        {isTeacher && !r.receiptNumber && (
+                          <span className="px-2 py-1 bg-muted text-muted-foreground rounded text-xs">View</span>
                         )}
                       </div>
                     </td>

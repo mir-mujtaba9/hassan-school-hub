@@ -12,29 +12,33 @@ import FeeCollection from "@/pages/FeeCollection";
 import StaffSalary from "@/pages/StaffSalary";
 import Expenses from "@/pages/Expenses";
 import BalanceSheet from "@/pages/BalanceSheet";
+import UserManagement from "@/pages/UserManagement";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isLoggedIn } = useAppContext();
+const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ children, adminOnly }) => {
+  const { isLoggedIn, userRole } = useAppContext();
   if (!isLoggedIn) return <Navigate to="/login" replace />;
+  if (adminOnly && userRole !== 'admin') return <Navigate to="/students" replace />;
   return <Layout>{children}</Layout>;
 };
 
 const AppRoutes = () => {
-  const { isLoggedIn } = useAppContext();
+  const { isLoggedIn, userRole } = useAppContext();
+  const defaultRoute = userRole === 'teacher' ? '/students' : '/admission';
   return (
     <Routes>
-      <Route path="/login" element={isLoggedIn ? <Navigate to="/admission" replace /> : <Login />} />
-      <Route path="/" element={<Navigate to="/admission" replace />} />
-      <Route path="/admission" element={<ProtectedRoute><StudentAdmission /></ProtectedRoute>} />
-      <Route path="/edit/:id" element={<ProtectedRoute><StudentAdmission /></ProtectedRoute>} />
+      <Route path="/login" element={isLoggedIn ? <Navigate to={defaultRoute} replace /> : <Login />} />
+      <Route path="/" element={<Navigate to={defaultRoute} replace />} />
+      <Route path="/admission" element={<ProtectedRoute adminOnly><StudentAdmission /></ProtectedRoute>} />
+      <Route path="/edit/:id" element={<ProtectedRoute adminOnly><StudentAdmission /></ProtectedRoute>} />
       <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
       <Route path="/fees" element={<ProtectedRoute><FeeCollection /></ProtectedRoute>} />
-      <Route path="/staff" element={<ProtectedRoute><StaffSalary /></ProtectedRoute>} />
-      <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-      <Route path="/balance" element={<ProtectedRoute><BalanceSheet /></ProtectedRoute>} />
+      <Route path="/staff" element={<ProtectedRoute adminOnly><StaffSalary /></ProtectedRoute>} />
+      <Route path="/expenses" element={<ProtectedRoute adminOnly><Expenses /></ProtectedRoute>} />
+      <Route path="/balance" element={<ProtectedRoute adminOnly><BalanceSheet /></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
