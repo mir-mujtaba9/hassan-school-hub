@@ -11,6 +11,8 @@ interface AppContextType {
   setIsLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
   userRole: string;
   setUserRole: React.Dispatch<React.SetStateAction<string>>;
+  userName: string;
+  setUserName: React.Dispatch<React.SetStateAction<string>>;
   staff: StaffMember[];
   setStaff: React.Dispatch<React.SetStateAction<StaffMember[]>>;
   salaryRecords: SalaryRecord[];
@@ -31,7 +33,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
 
   return (
-    <AppContext.Provider value={{ students, setStudents, feeRecords, setFeeRecords, isLoggedIn, setIsLoggedIn, userRole, setUserRole, staff, setStaff, salaryRecords, setSalaryRecords, expenses, setExpenses }}>
+    <AppContext.Provider value={{ students, setStudents, feeRecords, setFeeRecords, isLoggedIn, setIsLoggedIn, userRole, setUserRole, userName, setUserName, staff, setStaff, salaryRecords, setSalaryRecords, expenses, setExpenses }}>
       {children}
     </AppContext.Provider>
   );
