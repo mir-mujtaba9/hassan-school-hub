@@ -28,6 +28,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(initialFeeRecords);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('admin');
+  const [userName, setUserName] = useState('Muhammad Hassan');
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
   const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>(initialSalaryRecords);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
