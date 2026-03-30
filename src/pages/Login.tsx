@@ -44,9 +44,7 @@ const Login: React.FC = () => {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="bg-card rounded-xl shadow-lg w-full max-w-[420px] p-8">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <img src={schoolLogo} alt="Logo" className="w-16 h-16 rounded-full" />
-          </div>
+          <img src={schoolLogo} alt="Hassan Public School Logo" className="w-[120px] h-[120px] rounded-full mb-4" />
           <h1 className="text-xl font-bold text-navy">Hassan Public School</h1>
           <p className="text-muted-foreground text-sm">Butmong — Management System</p>
           <p className="text-primary text-xs italic mt-1">"I Shall Rise and Shine"</p>

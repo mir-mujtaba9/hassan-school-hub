@@ -60,7 +60,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-60 bg-navy flex flex-col transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-5 flex flex-col items-center border-b border-sidebar-border">
-          <img src={schoolLogo} alt="Hassan Public School" className="w-16 h-16 rounded-full bg-card/10 p-1" />
+          <img src={schoolLogo} alt="Hassan Public School" className="w-16 h-16 rounded-full" />
           <h1 className="text-card font-bold text-lg mt-3 text-center">Hassan Public School</h1>
           <p className="text-primary text-sm">Butmong</p>
         </div>
