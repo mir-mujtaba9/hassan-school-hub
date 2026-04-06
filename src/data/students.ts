@@ -57,6 +57,7 @@ export interface FeeRecord {
 
 export const CLASS_FEE_MAP: Record<string, number> = {
   'Nursery': 800,
+  'Prep': 900,
   'KG': 1000,
   'Class 1': 1200,
   'Class 2': 1200,
@@ -71,7 +72,7 @@ export const CLASS_FEE_MAP: Record<string, number> = {
 };
 
 export const CLASS_OPTIONS = [
-  'Nursery', 'KG', 'Class 1', 'Class 2', 'Class 3', 'Class 4',
+  'Nursery', 'Prep', 'KG', 'Class 1', 'Class 2', 'Class 3', 'Class 4',
   'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
 ];
 
