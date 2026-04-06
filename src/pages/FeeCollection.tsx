@@ -37,6 +37,10 @@ const FeeCollection: React.FC = () => {
   const [classFilter, setClassFilter] = useState('All Classes');
   const [statusFilter, setStatusFilter] = useState('All Status');
 
+  // Payment modal filters
+  const [paymentClassFilter, setPaymentClassFilter] = useState('All Classes');
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+
   const allRecordsForMonth = useMemo(() => {
     return feeRecords.filter(r => r.month === selectedMonth && r.year === selectedYear);
   }, [feeRecords, selectedMonth, selectedYear]);
@@ -87,6 +91,17 @@ const FeeCollection: React.FC = () => {
   const payingNow = parseInt(paymentAmount) || 0;
   const balanceAfter = totalDue - payingNow;
 
+  const filteredPaymentStudents = useMemo(() => {
+    return activeStudents.filter(s => {
+      if (paymentClassFilter !== 'All Classes' && s.studentClass !== paymentClassFilter) return false;
+      if (paymentSearchQuery) {
+        const q = paymentSearchQuery.toLowerCase();
+        if (!s.fullName.toLowerCase().includes(q) && !s.fatherName.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [activeStudents, paymentClassFilter, paymentSearchQuery]);
+
   const openPayment = (studentId?: string, balance?: boolean) => {
     setPaymentStudentId(studentId || '');
     setPaymentAmount('');
@@ -96,6 +111,8 @@ const FeeCollection: React.FC = () => {
     setPaymentMonth(selectedMonth);
     setPaymentYear(selectedYear);
     setIsBalancePayment(!!balance);
+    setPaymentClassFilter('All Classes');
+    setPaymentSearchQuery('');
     setShowPaymentModal(true);
 
     if (balance && studentId) {
@@ -351,10 +368,24 @@ const FeeCollection: React.FC = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium text-foreground">Student</label>
+                <label className="text-sm font-medium text-foreground">Filter by Class</label>
+                <select value={paymentClassFilter} onChange={e => { setPaymentClassFilter(e.target.value); setPaymentStudentId(''); }} className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1">
+                  <option>All Classes</option>
+                  {CLASS_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Search by Name</label>
+                <div className="relative mt-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input type="text" value={paymentSearchQuery} onChange={e => { setPaymentSearchQuery(e.target.value); setPaymentStudentId(''); }} placeholder="Student or father name..." className="w-full pl-8 pr-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Student <span className="text-muted-foreground font-normal">({filteredPaymentStudents.length} found)</span></label>
                 <select value={paymentStudentId} onChange={e => setPaymentStudentId(e.target.value)} className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1">
                   <option value="">Select Student</option>
-                  {activeStudents.map(s => <option key={s.id} value={s.id}>{s.fullName} — {s.studentClass}</option>)}
+                  {filteredPaymentStudents.map(s => <option key={s.id} value={s.id}>{s.fullName} — {s.studentClass}</option>)}
                 </select>
               </div>
 
