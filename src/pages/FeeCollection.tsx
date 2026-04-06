@@ -37,6 +37,10 @@ const FeeCollection: React.FC = () => {
   const [classFilter, setClassFilter] = useState('All Classes');
   const [statusFilter, setStatusFilter] = useState('All Status');
 
+  // Payment modal filters
+  const [paymentClassFilter, setPaymentClassFilter] = useState('All Classes');
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+
   const allRecordsForMonth = useMemo(() => {
     return feeRecords.filter(r => r.month === selectedMonth && r.year === selectedYear);
   }, [feeRecords, selectedMonth, selectedYear]);
