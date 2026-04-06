@@ -91,6 +91,17 @@ const FeeCollection: React.FC = () => {
   const payingNow = parseInt(paymentAmount) || 0;
   const balanceAfter = totalDue - payingNow;
 
+  const filteredPaymentStudents = useMemo(() => {
+    return activeStudents.filter(s => {
+      if (paymentClassFilter !== 'All Classes' && s.studentClass !== paymentClassFilter) return false;
+      if (paymentSearchQuery) {
+        const q = paymentSearchQuery.toLowerCase();
+        if (!s.fullName.toLowerCase().includes(q) && !s.fatherName.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [activeStudents, paymentClassFilter, paymentSearchQuery]);
+
   const openPayment = (studentId?: string, balance?: boolean) => {
     setPaymentStudentId(studentId || '');
     setPaymentAmount('');
@@ -100,6 +111,8 @@ const FeeCollection: React.FC = () => {
     setPaymentMonth(selectedMonth);
     setPaymentYear(selectedYear);
     setIsBalancePayment(!!balance);
+    setPaymentClassFilter('All Classes');
+    setPaymentSearchQuery('');
     setShowPaymentModal(true);
 
     if (balance && studentId) {
