@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { Student, formatRs, formatDate } from '@/data/students';
@@ -7,7 +7,7 @@ import { Eye, Pencil, Trash2, Search, Plus, X, ChevronLeft, ChevronRight, Users,
 const ITEMS_PER_PAGE = 10;
 
 const StudentsList: React.FC = () => {
-  const { students, setStudents, feeRecords, userRole } = useAppContext();
+  const { students, setStudents, feeRecords, userRole, authToken } = useAppContext();
   const navigate = useNavigate();
   const isTeacher = userRole === 'teacher';
   const [search, setSearch] = useState('');
@@ -16,28 +16,132 @@ const StudentsList: React.FC = () => {
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
   const [viewTab, setViewTab] = useState('personal');
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+  const [remoteIds, setRemoteIds] = useState<Set<string> | null>(null);
+  const [isRemoteLoading, setIsRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!search) {
+      setRemoteIds(null);
+      setRemoteError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const fetchStudents = async () => {
+      try {
+        setIsRemoteLoading(true);
+        setRemoteError(null);
+
+        const params = new URLSearchParams();
+        params.set('search', search);
+        const url = `http://localhost:4000/api/v1/students?${params.toString()}`;
+
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(url, { signal: controller.signal, headers });
+        if (!response.ok) {
+          setRemoteError('Unable to search students on server. Showing local results.');
+          setRemoteIds(null);
+          return;
+        }
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.students)
+          ? (data as any).students
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+
+        if (!Array.isArray(list)) {
+          setRemoteIds(null);
+          return;
+        }
+
+        const ids = new Set<string>();
+        list.forEach((item: any) => {
+          const id = item?.id ?? item?._id;
+          if (id != null) ids.add(String(id));
+        });
+
+        setRemoteIds(ids.size > 0 ? ids : null);
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+        setRemoteError('Unable to search students on server. Showing local results.');
+        setRemoteIds(null);
+      } finally {
+        setIsRemoteLoading(false);
+      }
+    };
+
+    fetchStudents();
+
+    return () => controller.abort();
+  }, [search, authToken]);
+
+  const visibleStudents = useMemo(() => {
+    if (!remoteIds) return students;
+    return students.filter(s => remoteIds.has(String(s.id)));
+  }, [students, remoteIds]);
 
   const filtered = useMemo(() => {
-    return students.filter(s => {
+    return visibleStudents.filter(s => {
       const matchSearch = !search || s.fullName.toLowerCase().includes(search.toLowerCase()) || s.fatherName.toLowerCase().includes(search.toLowerCase()) || s.studentClass.toLowerCase().includes(search.toLowerCase());
       const matchStatus = statusFilter === 'All' || s.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [students, search, statusFilter]);
+  }, [visibleStudents, search, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paged = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const stats = useMemo(() => ({
-    total: students.length,
-    active: students.filter(s => s.status === 'Active').length,
-    left: students.filter(s => s.status === 'Left').length,
-    newThisMonth: students.filter(s => { const d = new Date(s.admissionDate); const now = new Date(); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length,
-  }), [students]);
+    total: visibleStudents.length,
+    active: visibleStudents.filter(s => s.status === 'Active').length,
+    left: visibleStudents.filter(s => s.status === 'Left').length,
+    newThisMonth: visibleStudents.filter(s => { const d = new Date(s.admissionDate); const now = new Date(); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length,
+  }), [visibleStudents]);
 
-  const handleDelete = (student: Student) => {
-    setStudents(prev => prev.filter(s => s.id !== student.id));
-    setDeleteTarget(null);
+  const handleDelete = async (student: Student) => {
+    if (!student) return;
+    setDeleteError(null);
+    setIsDeleting(true);
+
+    try {
+      const headers: HeadersInit = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await fetch(`http://localhost:4000/api/v1/students/${student.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to delete student';
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.message === 'string') {
+            message = errorData.message;
+          }
+        } catch {
+          // ignore parse error
+        }
+        setDeleteError(message);
+        return;
+      }
+
+      setStudents(prev => prev.filter(s => s.id !== student.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      setDeleteError('Unable to delete student from server. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const studentFeeHistory = (studentId: string) => feeRecords.filter(r => r.studentId === studentId);
@@ -64,7 +168,7 @@ const StudentsList: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-foreground">Students</h1>
-          <span className="px-2.5 py-0.5 bg-muted text-muted-foreground text-xs rounded-full font-medium">{students.length} Students</span>
+          <span className="px-2.5 py-0.5 bg-muted text-muted-foreground text-xs rounded-full font-medium">{visibleStudents.length} Students{isRemoteLoading ? ' (searching...)' : ''}</span>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative">
@@ -83,6 +187,12 @@ const StudentsList: React.FC = () => {
           )}
         </div>
       </div>
+
+      {remoteError && (
+        <p className="mb-3 text-xs text-destructive bg-destructive/5 border border-destructive/30 rounded-md px-3 py-1.5">
+          {remoteError}
+        </p>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -301,9 +411,18 @@ const StudentsList: React.FC = () => {
           <div className="bg-card rounded-xl shadow-xl max-w-sm w-full p-6 animate-fade-in">
             <h3 className="text-lg font-bold text-foreground mb-2">Remove Student?</h3>
             <p className="text-sm text-muted-foreground mb-4">Are you sure you want to remove <span className="font-medium text-foreground">{deleteTarget.fullName}</span>? This will delete all fee records for this student.</p>
+            {deleteError && (
+              <p className="text-xs text-destructive mb-3 bg-destructive/5 border border-destructive/30 rounded-md px-2 py-1.5">{deleteError}</p>
+            )}
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2.5 bg-muted text-foreground rounded-lg text-sm hover:bg-muted/80 transition-colors">Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} className="flex-1 px-4 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-medium hover:bg-destructive/90 transition-colors">Yes, Remove</button>
+              <button
+                onClick={() => handleDelete(deleteTarget)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Removing...' : 'Yes, Remove'}
+              </button>
             </div>
           </div>
         </div>

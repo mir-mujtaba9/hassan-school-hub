@@ -9,23 +9,86 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const { setIsLoggedIn, setUserRole, setUserName } = useAppContext();
+  const [isLoading, setIsLoading] = useState(false);
+  const { setIsLoggedIn, setUserRole, setUserName, setAuthToken } = useAppContext();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email === 'admin@hassan.edu' && password === 'admin123') {
-      setIsLoggedIn(true);
-      setUserRole('admin');
-      setUserName('Muhammad Hassan');
-      navigate('/admission');
-    } else if (email === 'teacher@hassan.edu' && password === 'teacher123') {
-      setIsLoggedIn(true);
-      setUserRole('teacher');
-      setUserName('Ayesha Siddiq');
-      navigate('/students');
-    } else {
-      setError('Invalid email or password');
+    setError('');
+
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const baseUrl = 'http://localhost:4000/api/v1/auth';
+
+    try {
+      // Try admin login first
+      let response = await fetch(`${baseUrl}/admin-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const token =
+          (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
+          (data?.data && (data.data.token || data.data.accessToken));
+        setIsLoggedIn(true);
+        setUserRole('admin');
+        setUserName(data?.user?.name || email);
+        if (token && typeof token === 'string') {
+          setAuthToken(token);
+        }
+        navigate('/admission');
+        return;
+      }
+
+      // If admin login fails, try teacher login
+      response = await fetch(`${baseUrl}/teacher-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const token =
+          (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
+          (data?.data && (data.data.token || data.data.accessToken));
+        setIsLoggedIn(true);
+        setUserRole('teacher');
+        setUserName(data?.user?.name || email);
+        if (token && typeof token === 'string') {
+          setAuthToken(token);
+        }
+        navigate('/students');
+        return;
+      }
+
+      let errorMessage = 'Invalid email or password';
+      try {
+        const errorData = await response.json();
+        if (typeof errorData?.message === 'string') {
+          errorMessage = errorData.message;
+        }
+      } catch {
+        // ignore JSON parse errors
+      }
+      setError(errorMessage);
+    } catch (err) {
+      setError('Unable to connect to server. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,8 +140,12 @@ const Login: React.FC = () => {
               </button>
             </div>
           </div>
-          <button type="submit" className="w-full bg-primary text-primary-foreground py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors">
-            Login
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-primary text-primary-foreground py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Logging in...' : 'Login'}
           </button>
         </form>
 

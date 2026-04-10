@@ -15,15 +15,16 @@ const emptyStudent: Omit<Student, 'id'> = {
 };
 
 const FEE_STRUCTURE = [
-  { label: 'Nursery', fee: 800 }, { label: 'KG', fee: 1000 },
-  { label: 'Class 1 - 3', fee: 1200 }, { label: 'Class 4 - 6', fee: 1500 },
-  { label: 'Class 7 - 8', fee: 1800 }, { label: 'Class 9 - 10', fee: 2000 },
+  { label: 'Nursery', fee: 1400 }, { label: 'KG', fee: 1300 }, { label: 'Prep', fee: 1400 },
+  { label: 'Class 1 - 2', fee: 1500 }, { label: 'Class 3 - 4', fee: 1600 },
+  { label: 'Class 5 - 6', fee: 1700 }, { label: 'Class 7', fee: 1800 }, { label: 'Class 8', fee: 2000 },
+  { label: 'Class 9', fee: 2500 }, { label: 'Class 10', fee: 2700 },
 ];
 
 const StudentAdmission: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { students, setStudents } = useAppContext();
+  const { students, setStudents, authToken } = useAppContext();
   const isEdit = !!id;
   const existingStudent = isEdit ? students.find(s => s.id === id) : null;
 
@@ -31,6 +32,8 @@ const StudentAdmission: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [successInfo, setSuccessInfo] = useState({ name: '', cls: '', fee: 0 });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (existingStudent) {
@@ -58,19 +61,136 @@ const StudentAdmission: React.FC = () => {
     required.forEach(f => { if (!form[f]) newErrors[f] = true; });
     if (form.discount !== 'No Discount' && !form.discountReason) newErrors['discountReason'] = true;
     setErrors(newErrors);
+    setApiError(null);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return;
-    if (isEdit && id) {
-      setStudents(prev => prev.map(s => s.id === id ? { ...form, id } : s));
-      navigate('/students');
-    } else {
-      const newId = String(Date.now());
-      setStudents(prev => [...prev, { ...form, id: newId }]);
-      setSuccessInfo({ name: form.fullName, cls: form.studentClass, fee: form.discountedFee });
-      setShowSuccess(true);
+    setIsSubmitting(true);
+    setApiError(null);
+
+    const baseUrl = 'http://localhost:4000/api/v1/students';
+    try {
+      const classId = form.studentClass.startsWith('Class ')
+        ? form.studentClass.replace('Class ', '')
+        : undefined;
+
+      const basePayload: Record<string, unknown> = {
+        full_name: form.fullName,
+        father_name: form.fatherName,
+        date_of_birth: form.dateOfBirth,
+        religion: form.religion,
+        gender: form.gender,
+        father_phone: form.fatherPhone,
+        home_address: form.homeAddress,
+        admission_date: form.admissionDate,
+      };
+
+      if (classId) {
+        basePayload.class_id = classId;
+      }
+
+      if (isEdit && id) {
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${baseUrl}/${id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(basePayload),
+        });
+
+        if (!response.ok) {
+          let message = 'Failed to update student';
+          try {
+            const errorData = await response.json();
+            if (typeof errorData?.message === 'string') {
+              message = errorData.message;
+            }
+          } catch {
+            // ignore parse error
+          }
+          setApiError(message);
+          return;
+        }
+
+        setStudents(prev => prev.map(s => (s.id === id ? { ...s, ...form, id } : s)));
+        navigate('/students');
+      } else {
+        // Generate admission number like ADM2026-00123
+        const now = new Date();
+        const year = now.getFullYear();
+        const unique = String(now.getTime()).slice(-5);
+        const admissionNo = `ADM${year}-${unique}`;
+
+        const payload: Record<string, unknown> = {
+          ...basePayload,
+          admission_no: admissionNo,
+        };
+
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(baseUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          let message = 'Failed to register student';
+          try {
+            const errorData = await response.json();
+            if (typeof errorData?.message === 'string') {
+              message = errorData.message;
+            } else if (typeof errorData?.error === 'string') {
+              message = errorData.error;
+            }
+          } catch {
+            // ignore parse error
+          }
+          setApiError(message);
+          return;
+        }
+
+        const data = await response.json().catch(() => ({} as any));
+
+        // Try to locate the created student object from common API response shapes
+        let created: any = null;
+        if (Array.isArray(data)) {
+          created = data[0] ?? null;
+        } else if (data && typeof data === 'object') {
+          if (Array.isArray((data as any).students)) {
+            created = (data as any).students[0] ?? null;
+          } else if (Array.isArray((data as any).data)) {
+            created = (data as any).data[0] ?? null;
+          } else if ((data as any).student && typeof (data as any).student === 'object') {
+            created = (data as any).student;
+          } else if ((data as any).data && typeof (data as any).data === 'object') {
+            created = (data as any).data;
+          } else {
+            created = data;
+          }
+        }
+
+        const backendId = created?.id ?? created?._id ?? created?.student_id;
+        if (!backendId) {
+          console.error('Student created but response did not contain an ID field. Raw response:', data);
+          setApiError('Student created but server did not return an ID. Please contact support.');
+          return;
+        }
+
+        const newId = String(backendId);
+        setStudents(prev => [...prev, { ...form, id: newId }]);
+
+        setSuccessInfo({ name: form.fullName, cls: form.studentClass, fee: form.discountedFee });
+        setShowSuccess(true);
+      }
+    } catch (err) {
+      setApiError('Unable to connect to server. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -105,6 +225,11 @@ const StudentAdmission: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Main form */}
         <div className="flex-1 bg-card rounded-xl shadow-sm border border-border p-6">
+          {apiError && (
+            <div className="mb-4 px-4 py-2.5 rounded-lg bg-destructive/10 text-destructive text-sm">
+              {apiError}
+            </div>
+          )}
           {/* Personal Information */}
           <SectionHeader title="Personal Information" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -324,8 +449,12 @@ const StudentAdmission: React.FC = () => {
               <button className="flex items-center gap-2 px-4 py-2.5 bg-muted text-foreground rounded-lg text-sm hover:bg-muted/80 transition-colors">
                 <Save size={16} /> Save as Draft
               </button>
-              <button onClick={handleSubmit} className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
-                <CheckCircle size={16} /> {isEdit ? 'Update Student' : 'Register Student'}
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                <CheckCircle size={16} /> {isEdit ? (isSubmitting ? 'Updating...' : 'Update Student') : (isSubmitting ? 'Registering...' : 'Register Student')}
               </button>
             </div>
           </div>

@@ -56,19 +56,20 @@ export interface FeeRecord {
 }
 
 export const CLASS_FEE_MAP: Record<string, number> = {
-  'Nursery': 800,
-  'Prep': 900,
-  'KG': 1000,
-  'Class 1': 1200,
-  'Class 2': 1200,
-  'Class 3': 1200,
-  'Class 4': 1500,
-  'Class 5': 1500,
-  'Class 6': 1500,
+  // Updated fee structure (2025)
+  'Nursery': 1400,
+  'Prep': 1400,
+  'KG': 1300,
+  'Class 1': 1500,
+  'Class 2': 1500,
+  'Class 3': 1600,
+  'Class 4': 1600,
+  'Class 5': 1700,
+  'Class 6': 1700,
   'Class 7': 1800,
-  'Class 8': 1800,
-  'Class 9': 2000,
-  'Class 10': 2000,
+  'Class 8': 2000,
+  'Class 9': 2500,
+  'Class 10': 2700,
 };
 
 export const CLASS_OPTIONS = [

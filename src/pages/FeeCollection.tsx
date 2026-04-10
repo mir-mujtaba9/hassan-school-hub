@@ -1,19 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatRs, formatDate, generateReceiptNumber, MONTHS, FeeRecord, CLASS_OPTIONS } from '@/data/students';
 import { Plus, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle, Search, RotateCcw } from 'lucide-react';
 
 const FEE_STRUCTURE_SUMMARY = [
-  { cls: 'Nursery', students: 3, stdFee: 800, avgFee: 800 },
-  { cls: 'KG', students: 4, stdFee: 1000, avgFee: 950 },
-  { cls: 'Class 1-3', students: 8, stdFee: 1200, avgFee: 1100 },
-  { cls: 'Class 4-6', students: 7, stdFee: 1500, avgFee: 1350 },
-  { cls: 'Class 7-8', students: 6, stdFee: 1800, avgFee: 1575 },
-  { cls: 'Class 9-10', students: 4, stdFee: 2000, avgFee: 2000 },
+   { cls: 'KG', students: 0, stdFee: 1300, avgFee: 1300 },
+  { cls: 'Nursery', students: 0, stdFee: 1400, avgFee: 1400 },
+  { cls: 'Prep', students: 0, stdFee: 1400, avgFee: 1400 },
+  { cls: 'Class 1-2', students: 0, stdFee: 1500, avgFee: 1500 },
+  { cls: 'Class 3-4', students: 0, stdFee: 1600, avgFee: 1600 },
+  { cls: 'Class 5-6', students: 0, stdFee: 1700, avgFee: 1700 },
+  { cls: 'Class 7', students: 0, stdFee: 1800, avgFee: 1800 },
+  { cls: 'Class 8', students: 0, stdFee: 2000, avgFee: 2000 },
+  { cls: 'Class 9', students: 0, stdFee: 2500, avgFee: 2500 },
+  { cls: 'Class 10', students: 0, stdFee: 2700, avgFee: 2700 },
 ];
 
 const FeeCollection: React.FC = () => {
-  const { students, feeRecords, setFeeRecords, userRole } = useAppContext();
+  const { students, feeRecords, setFeeRecords, userRole, authToken } = useAppContext();
   const activeStudents = students.filter(s => s.status === 'Active');
   const isTeacher = userRole === 'teacher';
 
@@ -41,14 +45,95 @@ const FeeCollection: React.FC = () => {
   const [paymentClassFilter, setPaymentClassFilter] = useState('All Classes');
   const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
 
+  const [studentFilterIds, setStudentFilterIds] = useState<Set<string> | null>(null);
+  const [isStudentFilterLoading, setIsStudentFilterLoading] = useState(false);
+  const [studentFilterError, setStudentFilterError] = useState<string | null>(null);
+
   const allRecordsForMonth = useMemo(() => {
     return feeRecords.filter(r => r.month === selectedMonth && r.year === selectedYear);
   }, [feeRecords, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    if (!searchQuery && classFilter === 'All Classes') {
+      setStudentFilterIds(null);
+      setStudentFilterError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchFilteredStudents = async () => {
+      try {
+        setIsStudentFilterLoading(true);
+        setStudentFilterError(null);
+
+        const params = new URLSearchParams();
+        if (searchQuery) params.set('search', searchQuery);
+
+        if (classFilter !== 'All Classes') {
+          const match = classFilter.match(/^Class\s+(\d+)$/);
+          if (match) {
+            params.set('class_id', match[1]);
+          }
+        }
+
+        const qs = params.toString();
+        if (!qs) {
+          setStudentFilterIds(null);
+          return;
+        }
+
+        const url = `http://localhost:4000/api/v1/students?${qs}`;
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(url, { signal: controller.signal, headers });
+        if (!response.ok) {
+          setStudentFilterError('Unable to apply server-side student filters. Showing local results.');
+          setStudentFilterIds(null);
+          return;
+        }
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.students)
+          ? (data as any).students
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+
+        if (!Array.isArray(list)) {
+          setStudentFilterIds(null);
+          return;
+        }
+
+        const ids = new Set<string>();
+        list.forEach((item: any) => {
+          const id = item?.id ?? item?._id;
+          if (id != null) ids.add(String(id));
+        });
+
+        setStudentFilterIds(ids.size > 0 ? ids : null);
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+        setStudentFilterError('Unable to apply server-side student filters. Showing local results.');
+        setStudentFilterIds(null);
+      } finally {
+        setIsStudentFilterLoading(false);
+      }
+    };
+
+    fetchFilteredStudents();
+
+    return () => controller.abort();
+  }, [searchQuery, classFilter, authToken]);
 
   const currentRecords = useMemo(() => {
     return allRecordsForMonth.filter(r => {
       const student = students.find(s => s.id === r.studentId);
       if (!student) return false;
+      if (studentFilterIds && !studentFilterIds.has(student.id)) return false;
       // Search filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -252,6 +337,12 @@ const FeeCollection: React.FC = () => {
         <p className="text-xs text-muted-foreground mt-3">
           Showing {currentRecords.length} of {allRecordsForMonth.length} students — {filteredStatusCounts.paid} Paid, {filteredStatusCounts.partial} Partial, {filteredStatusCounts.unpaid} Unpaid
         </p>
+        {isStudentFilterLoading && (
+          <p className="text-[11px] text-muted-foreground mt-1">Applying server filters...</p>
+        )}
+        {studentFilterError && (
+          <p className="text-[11px] text-destructive mt-1">{studentFilterError}</p>
+        )}
       </div>
 
       {/* Fee Table */}
