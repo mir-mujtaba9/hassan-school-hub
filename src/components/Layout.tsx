@@ -27,7 +27,7 @@ const pageTitles: Record<string, string> = {
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setIsLoggedIn, userRole, userName } = useAppContext();
+  const { setIsLoggedIn, setAuthToken, userRole, userName, authToken } = useAppContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const currentPath = location.pathname;
@@ -39,9 +39,30 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return !item.adminOnly;
   });
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      if (authToken) {
+        await fetch('http://localhost:4000/api/v1/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+      }
+    } catch {
+      // Ignore logout API errors and still clear local auth state.
+    } finally {
+      setAuthToken(null);
+      setIsLoggedIn(false);
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('authToken');
+        window.sessionStorage.removeItem('authToken');
+        document.cookie = 'authToken=; Max-Age=0; path=/';
+      }
+      navigate('/login', { replace: true });
+    }
   };
 
   const navTo = (path: string) => {

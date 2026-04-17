@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, FeeRecord, initialStudents, initialFeeRecords } from '@/data/students';
-import { StaffMember, SalaryRecord, Expense, initialStaff, initialSalaryRecords, initialExpenses } from '@/data/staff';
+import { StaffMember, SalaryRecord, Expense, STAFF_ROLES, initialStaff, initialSalaryRecords, initialExpenses } from '@/data/staff';
 
 interface AppContextType {
   students: Student[];
@@ -17,6 +17,8 @@ interface AppContextType {
   setAuthToken: React.Dispatch<React.SetStateAction<string | null>>;
   staff: StaffMember[];
   setStaff: React.Dispatch<React.SetStateAction<StaffMember[]>>;
+  staffRoles: string[];
+  setStaffRoles: React.Dispatch<React.SetStateAction<string[]>>;
   salaryRecords: SalaryRecord[];
   setSalaryRecords: React.Dispatch<React.SetStateAction<SalaryRecord[]>>;
   expenses: Expense[];
@@ -36,6 +38,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
      return localStorage.getItem('authToken');
    });
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
+  const [staffRoles, setStaffRoles] = useState<string[]>(STAFF_ROLES);
   const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>(initialSalaryRecords);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
 
@@ -111,6 +114,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             studentClass:
               item.student_class ??
               item.studentClass ??
+              item.class_name ??
+              item.className ??
+              item.class?.name ??
+              item.class?.class_name ??
+              item.class?.title ??
+              item.class?.label ??
               (item.class_id ? `Class ${item.class_id}` : ''),
             section: item.section ?? '',
             rollNumber:
@@ -146,8 +155,204 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadStudentsFromApi();
   }, [authToken]);
 
+  useEffect(() => {
+    const loadStaffFromApi = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        const response = await fetch('http://localhost:4000/api/v1/staff', { headers });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const list = Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : Array.isArray((data as any)?.staff)
+          ? (data as any).staff
+          : Array.isArray(data)
+          ? data
+          : [];
+
+        if (Array.isArray((data as any)?.staffRoles)) {
+          const roles = (data as any).staffRoles.filter((r: unknown) => typeof r === 'string');
+          if (roles.length > 0) {
+            setStaffRoles(roles);
+          }
+        }
+
+        if (!Array.isArray(list)) return;
+
+        const mapped: StaffMember[] = list.map((item: any, index: number) => {
+          const statusRaw = String(item?.status ?? 'Active');
+          const status: 'Active' | 'Inactive' = statusRaw === 'Inactive' ? 'Inactive' : 'Active';
+
+          return {
+            id: String(item?.id ?? item?._id ?? `s-${index + 1}`),
+            fullName: item?.full_name ?? item?.fullName ?? '',
+            fatherName: item?.father_name ?? item?.fatherName ?? '',
+            role: item?.role ?? 'Other',
+            gender: item?.gender ?? 'Male',
+            monthlySalary: Number(item?.monthly_salary ?? item?.monthlySalary ?? 0) || 0,
+            joinDate: item?.join_date ?? item?.joinDate ?? '',
+            phone: item?.phone ?? '',
+            cnic: item?.cnic ?? '',
+            dateOfBirth: item?.date_of_birth ?? item?.dateOfBirth ?? '',
+            qualification: item?.qualification ?? '',
+            address: item?.address ?? '',
+            notes: item?.notes ?? '',
+            status,
+            inactiveDate: item?.inactive_date ?? item?.inactiveDate,
+            inactiveReason: item?.inactive_reason ?? item?.inactiveReason,
+          };
+        });
+
+        setStaff(mapped);
+      } catch {
+        // If backend is unavailable, keep initial demo data
+      }
+    };
+
+    loadStaffFromApi();
+  }, [authToken]);
+
+  useEffect(() => {
+    const loadSalariesFromApi = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        const response = await fetch('http://localhost:4000/api/v1/salaries', { headers });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const list = Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : Array.isArray((data as any)?.salaries)
+          ? (data as any).salaries
+          : Array.isArray((data as any)?.salary)
+          ? (data as any).salary
+          : Array.isArray(data)
+          ? data
+          : [];
+
+        if (!Array.isArray(list)) return;
+
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+        const mapped: SalaryRecord[] = list.map((item: any, index: number) => {
+          const rawMonth = item?.month;
+          const month =
+            typeof rawMonth === 'number'
+              ? monthNames[rawMonth - 1] ?? 'January'
+              : typeof rawMonth === 'string'
+              ? rawMonth
+              : 'January';
+
+          const rawStatus = item?.status;
+          const status: 'Payable' | 'Paid' =
+            rawStatus === 'Payable' || rawStatus === 'Paid'
+              ? rawStatus
+              : item?.payment_date || item?.paymentDate
+              ? 'Paid'
+              : 'Payable';
+
+          return {
+            id: String(item?.id ?? item?._id ?? `sal-${index + 1}`),
+            staffId: String(item?.staff_id ?? item?.staffId ?? ''),
+            month,
+            year: Number(item?.year ?? new Date().getFullYear()),
+            amount: Number(item?.amount ?? 0),
+            status,
+            paymentDate: item?.payment_date ?? item?.paymentDate ?? '',
+            paymentMethod: item?.payment_method ?? item?.paymentMethod ?? 'Cash',
+            receiptNumber: item?.receipt_number ?? item?.receiptNumber ?? '',
+            notes: item?.notes ?? '',
+          };
+        }).filter(r => !!r.staffId);
+
+        setSalaryRecords(mapped);
+      } catch {
+        // If backend is unavailable, keep initial demo data
+      }
+    };
+
+    loadSalariesFromApi();
+  }, [authToken]);
+
+  useEffect(() => {
+    const loadFeesFromApi = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        const response = await fetch('http://localhost:4000/api/v1/fees', { headers });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.fees)
+          ? (data as any).fees
+          : Array.isArray((data as any)?.data?.fees)
+          ? (data as any).data.fees
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : (data as any)?.fee
+          ? [(data as any).fee]
+          : [];
+
+        if (!Array.isArray(list)) return;
+
+        const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+        const mapped: FeeRecord[] = list.map((item: any) => {
+          const id = String(item.id ?? item._id ?? `f-${Date.now()}`);
+          const studentId = String(item.student_id ?? item.studentId ?? '');
+          const monthVal = item.month ?? item.month_num ?? 3;
+          const monthName = typeof monthVal === 'number' ? (MONTHS[monthVal - 1] ?? 'Unknown') : monthVal;
+          const year = Number(item.year ?? 2025);
+          const monthlyFee = Number(item.monthly_fee ?? item.monthlyFee ?? 0);
+          const prevBalance = Number(item.prev_balance ?? item.prevBalance ?? 0);
+          const totalDue = Number(item.total_due ?? item.totalDue ?? monthlyFee + prevBalance);
+          const paidAmount = Number(item.paid_amount ?? item.paidAmount ?? 0);
+          const balanceRemaining = Number(item.balance_remaining ?? item.balanceRemaining ?? Math.max(0, totalDue - paidAmount));
+          const status = (item.status ?? 'Unpaid') as FeeRecord['status'];
+
+          return {
+            id,
+            studentId,
+            month: monthName,
+            year,
+            monthlyFee,
+            prevBalance,
+            totalDue,
+            paidAmount,
+            balanceRemaining,
+            status,
+            paymentDate: item.payment_date ?? item.paymentDate,
+            paymentMethod: item.payment_method ?? item.paymentMethod,
+            receiptNumber: item.receipt_number ?? item.receiptNumber,
+            notes: item.notes,
+          };
+        });
+
+        setFeeRecords(mapped);
+      } catch {
+        // If backend is unavailable, keep initial demo data
+      }
+    };
+
+    loadFeesFromApi();
+  }, [authToken]);
+
   return (
-    <AppContext.Provider value={{ students, setStudents, feeRecords, setFeeRecords, isLoggedIn, setIsLoggedIn, userRole, setUserRole, userName, setUserName, authToken, setAuthToken, staff, setStaff, salaryRecords, setSalaryRecords, expenses, setExpenses }}>
+    <AppContext.Provider value={{ students, setStudents, feeRecords, setFeeRecords, isLoggedIn, setIsLoggedIn, userRole, setUserRole, userName, setUserName, authToken, setAuthToken, staff, setStaff, staffRoles, setStaffRoles, salaryRecords, setSalaryRecords, expenses, setExpenses }}>
       {children}
     </AppContext.Provider>
   );

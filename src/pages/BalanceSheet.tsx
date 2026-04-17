@@ -48,7 +48,9 @@ const BalanceSheet = () => {
   // Salary expenses
   const salaryData = useMemo(() => {
     return staff.filter(s => s.status === 'Active').map(s => {
-      const rec = salaryRecords.find(r => r.staffId === s.id && r.month === selectedMonth && r.year === selectedYear);
+      const rec = salaryRecords.find(
+        r => r.staffId === s.id && r.month === selectedMonth && r.year === selectedYear && (r.status ?? 'Paid') === 'Paid'
+      );
       return { ...s, paid: !!rec, paidMonth: rec ? `${selectedMonth.slice(0, 3)}-${selectedYear}` : '—' };
     });
   }, [staff, salaryRecords, selectedMonth, selectedYear]);

@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
-import { Student, CLASS_OPTIONS, CLASS_FEE_MAP, DISCOUNT_OPTIONS, calcDiscountedFee, formatRs } from '@/data/students';
+import { Student, CLASS_FEE_MAP, DISCOUNT_OPTIONS, calcDiscountedFee, formatRs } from '@/data/students';
 import { CalendarIcon, RotateCcw, Save, CheckCircle } from 'lucide-react';
+
+type ClassOption = {
+  id: string;
+  name: string;
+};
+
+const API_BASE_URL = 'http://localhost:4000/api/v1';
 
 const emptyStudent: Omit<Student, 'id'> = {
   fullName: '', fatherName: '', dateOfBirth: '', gender: '', religion: 'Islam', nationality: 'Pakistani',
@@ -34,6 +41,81 @@ const StudentAdmission: React.FC = () => {
   const [successInfo, setSuccessInfo] = useState({ name: '', cls: '', fee: 0 });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadClasses = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/classes`, { signal: controller.signal, headers });
+        if (!response.ok) {
+          setClasses([]);
+          return;
+        }
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.classes)
+          ? (data as any).classes
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+
+        const mapped: ClassOption[] = (Array.isArray(list) ? list : [])
+          .map((item: any) => {
+            const rawId = item?.id ?? item?._id ?? item?.class_id ?? item?.value;
+            if (rawId == null) return null;
+            const id = String(rawId);
+            const name =
+              item?.name ??
+              item?.class_name ??
+              item?.title ??
+              item?.label ??
+              (typeof item?.class_number === 'number' ? `Class ${item.class_number}` : undefined) ??
+              (typeof item?.class === 'string' ? item.class : undefined) ??
+              `Class ${id}`;
+            return { id, name: String(name) };
+          })
+          .filter(Boolean) as ClassOption[];
+
+        setClasses(mapped);
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+        setClasses([]);
+      }
+    };
+
+    loadClasses();
+    return () => controller.abort();
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!classes.length) return;
+    if (selectedClassId) return;
+    if (!form.studentClass) return;
+
+    const matchByName = classes.find(c => c.name === form.studentClass);
+    if (matchByName) {
+      setSelectedClassId(matchByName.id);
+      return;
+    }
+
+    const idMatch = form.studentClass.match(/^Class\s+(\d+)$/);
+    if (!idMatch) return;
+    const matchById = classes.find(c => c.id === idMatch[1]);
+    if (matchById) {
+      setSelectedClassId(matchById.id);
+      setForm(prev => ({ ...prev, studentClass: matchById.name }));
+      setErrors(prev => ({ ...prev, studentClass: false }));
+    }
+  }, [classes, form.studentClass, selectedClassId]);
 
   useEffect(() => {
     if (existingStudent) {
@@ -70,12 +152,8 @@ const StudentAdmission: React.FC = () => {
     setIsSubmitting(true);
     setApiError(null);
 
-    const baseUrl = 'http://localhost:4000/api/v1/students';
+    const baseUrl = `${API_BASE_URL}/students`;
     try {
-      const classId = form.studentClass.startsWith('Class ')
-        ? form.studentClass.replace('Class ', '')
-        : undefined;
-
       const basePayload: Record<string, unknown> = {
         full_name: form.fullName,
         father_name: form.fatherName,
@@ -85,10 +163,15 @@ const StudentAdmission: React.FC = () => {
         father_phone: form.fatherPhone,
         home_address: form.homeAddress,
         admission_date: form.admissionDate,
+        discount: form.discount,
+        discount_reason: form.discountReason || '',
       };
 
-      if (classId) {
-        basePayload.class_id = classId;
+      if (selectedClassId) {
+        basePayload.class_id = selectedClassId;
+      } else {
+        const idMatch = form.studentClass.match(/^Class\s+(\d+)$/);
+        if (idMatch) basePayload.class_id = idMatch[1];
       }
 
       if (isEdit && id) {
@@ -339,9 +422,22 @@ const StudentAdmission: React.FC = () => {
             </div>
             <div>
               <label className="text-sm font-medium text-foreground">Class *</label>
-              <select value={form.studentClass} onChange={e => update('studentClass', e.target.value)} className={selectClass('studentClass')}>
+              <select
+                value={selectedClassId}
+                onChange={e => {
+                  const newId = e.target.value;
+                  setSelectedClassId(newId);
+                  const cls = classes.find(c => c.id === newId);
+                  update('studentClass', cls?.name ?? '');
+                }}
+                className={selectClass('studentClass')}
+              >
                 <option value="">Select Class</option>
-                {CLASS_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
               </select>
               <ErrorMsg field="studentClass" />
             </div>

@@ -25,6 +25,7 @@ export interface SalaryRecord {
   month: string;
   year: number;
   amount: number;
+  status?: 'Payable' | 'Paid';
   paymentDate: string;
   paymentMethod: string;
   receiptNumber: string;

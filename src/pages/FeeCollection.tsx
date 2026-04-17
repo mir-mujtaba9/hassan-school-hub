@@ -1,7 +1,67 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { formatRs, formatDate, generateReceiptNumber, MONTHS, FeeRecord, CLASS_OPTIONS } from '@/data/students';
+import { formatRs, generateReceiptNumber, MONTHS, FeeRecord } from '@/data/students';
 import { Plus, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle, Search, RotateCcw } from 'lucide-react';
+
+type ClassOption = {
+  id: string;
+  name: string;
+};
+
+const API_BASE_URL = 'http://localhost:4000/api/v1';
+
+const MONTH_TO_NUM: Record<string, number> = {
+  'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
+  'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12,
+};
+
+const MONTHS_LOWER = MONTHS.map(m => m.toLowerCase());
+
+const normalizeFeeRecord = (item: any, fallbackMonth: string, fallbackYear: number): FeeRecord | null => {
+  if (!item) return null;
+  const id = String(item?.id ?? item?._id ?? '');
+  const studentId = String(item?.student_id ?? item?.studentId ?? '');
+  if (!id || !studentId) return null;
+
+  const monthVal = item?.month ?? fallbackMonth;
+  let monthName = fallbackMonth;
+  if (typeof monthVal === 'number') {
+    monthName = MONTHS[monthVal - 1] ?? fallbackMonth;
+  } else if (typeof monthVal === 'string') {
+    const idx = MONTHS_LOWER.indexOf(monthVal.toLowerCase());
+    monthName = idx >= 0 ? MONTHS[idx] : monthVal;
+  }
+
+  const year = Number(item?.year ?? fallbackYear);
+  const monthlyFee = Number(item?.monthly_fee ?? item?.monthlyFee ?? 0);
+  const paidAmount = Number(item?.paid_amount ?? item?.paidAmount ?? 0);
+  const prevBalance = Number(item?.prev_balance ?? item?.prevBalance ?? 0);
+  const totalDue = Number(item?.total_due ?? item?.totalDue ?? monthlyFee + prevBalance);
+  const balanceRemaining = Number(item?.balance_remaining ?? item?.balanceRemaining ?? Math.max(0, totalDue - paidAmount));
+  const status = (item?.status ?? 'Unpaid') as FeeRecord['status'];
+
+  return {
+    id,
+    studentId,
+    month: monthName,
+    year,
+    monthlyFee,
+    prevBalance,
+    totalDue,
+    paidAmount,
+    balanceRemaining,
+    status,
+    paymentDate: item?.payment_date ?? item?.paymentDate,
+    paymentMethod: item?.payment_method ?? item?.paymentMethod,
+    receiptNumber: item?.receipt_number ?? item?.receiptNumber,
+    notes: item?.notes,
+  };
+};
+
+const extractFeeFromResponse = (data: any): any => {
+  if (!data || typeof data !== 'object') return null;
+  return data.fee ?? data?.data?.fee ?? data?.data ?? data;
+};
 
 const FEE_STRUCTURE_SUMMARY = [
    { cls: 'KG', students: 0, stdFee: 1300, avgFee: 1300 },
@@ -38,12 +98,119 @@ const FeeCollection: React.FC = () => {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [classFilter, setClassFilter] = useState('All Classes');
+  const [classFilterId, setClassFilterId] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState('All Status');
 
   // Payment modal filters
-  const [paymentClassFilter, setPaymentClassFilter] = useState('All Classes');
+  const [paymentClassId, setPaymentClassId] = useState<string>('');
   const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [isFeesLoading, setIsFeesLoading] = useState(false);
+
+  const classNameById = useMemo(() => new Map(classes.map(c => [c.id, c.name] as const)), [classes]);
+  const selectedClassName = classFilterId ? classNameById.get(classFilterId) : undefined;
+  const paymentClassName = paymentClassId ? classNameById.get(paymentClassId) : undefined;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadClasses = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/classes`, { signal: controller.signal, headers });
+        if (!response.ok) {
+          setClasses([]);
+          return;
+        }
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.classes)
+          ? (data as any).classes
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+
+        const mapped: ClassOption[] = (Array.isArray(list) ? list : [])
+          .map((item: any) => {
+            const rawId = item?.id ?? item?._id ?? item?.class_id ?? item?.value;
+            if (rawId == null) return null;
+            const id = String(rawId);
+            const name =
+              item?.name ??
+              item?.class_name ??
+              item?.title ??
+              item?.label ??
+              (typeof item?.class_number === 'number' ? `Class ${item.class_number}` : undefined) ??
+              (typeof item?.class === 'string' ? item.class : undefined) ??
+              `Class ${id}`;
+            return { id, name: String(name) };
+          })
+          .filter(Boolean) as ClassOption[];
+
+        setClasses(mapped);
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+        setClasses([]);
+      }
+    };
+
+    loadClasses();
+    return () => controller.abort();
+  }, [authToken]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadFeesForMonth = async () => {
+      try {
+        setIsFeesLoading(true);
+        const monthNum = MONTH_TO_NUM[selectedMonth] ?? new Date().getMonth() + 1;
+        const params = new URLSearchParams();
+        params.set('month', String(monthNum));
+        params.set('year', String(selectedYear));
+
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/fees?${params.toString()}`, {
+          signal: controller.signal,
+          headers,
+        });
+
+        if (!response.ok) {
+          setIsFeesLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.fees)
+          ? (data as any).fees
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+
+        const mapped: FeeRecord[] = (Array.isArray(list) ? list : [])
+          .map((item: any) => normalizeFeeRecord(item, selectedMonth, selectedYear))
+          .filter(Boolean) as FeeRecord[];
+
+        setFeeRecords(mapped);
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+      } finally {
+        setIsFeesLoading(false);
+      }
+    };
+
+    loadFeesForMonth();
+    return () => controller.abort();
+  }, [selectedMonth, selectedYear, authToken]);
 
   const [studentFilterIds, setStudentFilterIds] = useState<Set<string> | null>(null);
   const [isStudentFilterLoading, setIsStudentFilterLoading] = useState(false);
@@ -54,7 +221,7 @@ const FeeCollection: React.FC = () => {
   }, [feeRecords, selectedMonth, selectedYear]);
 
   useEffect(() => {
-    if (!searchQuery && classFilter === 'All Classes') {
+    if (!searchQuery && !classFilterId) {
       setStudentFilterIds(null);
       setStudentFilterError(null);
       return;
@@ -70,12 +237,7 @@ const FeeCollection: React.FC = () => {
         const params = new URLSearchParams();
         if (searchQuery) params.set('search', searchQuery);
 
-        if (classFilter !== 'All Classes') {
-          const match = classFilter.match(/^Class\s+(\d+)$/);
-          if (match) {
-            params.set('class_id', match[1]);
-          }
-        }
+        if (classFilterId) params.set('class_id', classFilterId);
 
         const qs = params.toString();
         if (!qs) {
@@ -83,7 +245,7 @@ const FeeCollection: React.FC = () => {
           return;
         }
 
-        const url = `http://localhost:4000/api/v1/students?${qs}`;
+        const url = `${API_BASE_URL}/students?${qs}`;
         const headers: HeadersInit = {};
         if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
@@ -127,7 +289,7 @@ const FeeCollection: React.FC = () => {
     fetchFilteredStudents();
 
     return () => controller.abort();
-  }, [searchQuery, classFilter, authToken]);
+  }, [searchQuery, classFilterId, authToken]);
 
   const currentRecords = useMemo(() => {
     return allRecordsForMonth.filter(r => {
@@ -139,13 +301,13 @@ const FeeCollection: React.FC = () => {
         const q = searchQuery.toLowerCase();
         if (!student.fullName.toLowerCase().includes(q) && !student.fatherName.toLowerCase().includes(q)) return false;
       }
-      // Class filter
-      if (classFilter !== 'All Classes' && student.studentClass !== classFilter) return false;
+      // Class filter (best-effort local match; the server-filtered ID set is the source of truth)
+      if (selectedClassName && student.studentClass && student.studentClass !== selectedClassName) return false;
       // Status filter
       if (statusFilter !== 'All Status' && r.status !== statusFilter) return false;
       return true;
     });
-  }, [allRecordsForMonth, students, searchQuery, classFilter, statusFilter]);
+  }, [allRecordsForMonth, students, studentFilterIds, searchQuery, selectedClassName, statusFilter]);
 
   const stats = useMemo(() => {
     const expected = allRecordsForMonth.reduce((s, r) => s + r.monthlyFee, 0);
@@ -162,11 +324,11 @@ const FeeCollection: React.FC = () => {
     return { paid, partial, unpaid };
   }, [currentRecords]);
 
-  const hasActiveFilters = searchQuery || classFilter !== 'All Classes' || statusFilter !== 'All Status';
+  const hasActiveFilters = searchQuery || !!classFilterId || statusFilter !== 'All Status';
 
   const resetFilters = () => {
     setSearchQuery('');
-    setClassFilter('All Classes');
+    setClassFilterId('');
     setStatusFilter('All Status');
   };
 
@@ -178,14 +340,14 @@ const FeeCollection: React.FC = () => {
 
   const filteredPaymentStudents = useMemo(() => {
     return activeStudents.filter(s => {
-      if (paymentClassFilter !== 'All Classes' && s.studentClass !== paymentClassFilter) return false;
+      if (paymentClassName && s.studentClass !== paymentClassName) return false;
       if (paymentSearchQuery) {
         const q = paymentSearchQuery.toLowerCase();
         if (!s.fullName.toLowerCase().includes(q) && !s.fatherName.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [activeStudents, paymentClassFilter, paymentSearchQuery]);
+  }, [activeStudents, paymentClassName, paymentSearchQuery]);
 
   const openPayment = (studentId?: string, balance?: boolean) => {
     setPaymentStudentId(studentId || '');
@@ -196,7 +358,7 @@ const FeeCollection: React.FC = () => {
     setPaymentMonth(selectedMonth);
     setPaymentYear(selectedYear);
     setIsBalancePayment(!!balance);
-    setPaymentClassFilter('All Classes');
+    setPaymentClassId('');
     setPaymentSearchQuery('');
     setShowPaymentModal(true);
 
@@ -206,37 +368,185 @@ const FeeCollection: React.FC = () => {
     }
   };
 
-  const savePayment = () => {
+  const savePayment = async () => {
+    if (isTeacher) return;
     if (!paymentStudentId || payingNow <= 0) return;
     const student = students.find(s => s.id === paymentStudentId)!;
     const receiptNum = generateReceiptNumber();
 
-    if (existingRecord && isBalancePayment) {
-      const newPaid = existingRecord.paidAmount + payingNow;
-      const newBalance = existingRecord.totalDue - newPaid;
-      const newStatus: FeeRecord['status'] = newBalance <= 0 ? (newPaid > existingRecord.totalDue ? 'Advance' : 'Paid') : 'Partial';
-      setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? {
-        ...r, paidAmount: newPaid, balanceRemaining: Math.max(0, newBalance), status: newStatus,
-        paymentDate: paymentDate, paymentMethod: paymentMethod, receiptNumber: receiptNum, notes: paymentNotes || r.notes,
-      } : r));
-      setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, newBalance), receipt: receiptNum });
-    } else {
+    const monthNum = MONTH_TO_NUM[paymentMonth] ?? new Date().getMonth() + 1;
+
+    try {
+      if (existingRecord) {
+        const newPaid = existingRecord.paidAmount + payingNow;
+        const newBalance = existingRecord.totalDue - newPaid;
+        const newStatus: FeeRecord['status'] = newBalance <= 0 ? 'Paid' : 'Partial';
+
+        const payload = {
+          paidAmount: payingNow,
+          paymentDate: paymentDate,
+          paymentMethod: paymentMethod,
+          notes: paymentNotes || existingRecord.notes,
+        };
+
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/fees/${existingRecord.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const updated = await response.json().catch(() => ({} as any));
+          const normalized = normalizeFeeRecord(extractFeeFromResponse(updated), paymentMonth, paymentYear);
+          const convertedRecord: FeeRecord = normalized ?? {
+            ...existingRecord,
+            paidAmount: newPaid,
+            balanceRemaining: Math.max(0, newBalance),
+            status: newStatus,
+            paymentDate: paymentDate,
+            paymentMethod: paymentMethod,
+            receiptNumber: existingRecord.receiptNumber ?? receiptNum,
+            notes: paymentNotes || existingRecord.notes,
+          };
+          setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? convertedRecord : r));
+          setLastReceipt({ name: student.fullName, amount: payingNow, balance: convertedRecord.balanceRemaining, receipt: convertedRecord.receiptNumber || receiptNum });
+        } else {
+          setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? {
+            ...r, paidAmount: newPaid, balanceRemaining: Math.max(0, newBalance), status: newStatus,
+            paymentDate: paymentDate, paymentMethod: paymentMethod, receiptNumber: receiptNum, notes: paymentNotes || r.notes,
+          } : r));
+          setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, newBalance), receipt: receiptNum });
+        }
+      } else {
+        const prevBal = existingRecord?.prevBalance || 0;
+        const due = student.discountedFee + prevBal;
+        const bal = due - payingNow;
+        const status: FeeRecord['status'] = bal <= 0 ? (payingNow > due ? 'Advance' : 'Paid') : payingNow > 0 ? 'Partial' : 'Unpaid';
+
+        const payload = {
+          studentId: paymentStudentId,
+          month: monthNum,
+          year: paymentYear,
+          paidAmount: payingNow,
+          paymentDate: paymentDate,
+          paymentMethod: paymentMethod,
+          notes: paymentNotes,
+        };
+
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/fees`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const created = await response.json().catch(() => ({} as any));
+          const normalized = normalizeFeeRecord(extractFeeFromResponse(created), paymentMonth, paymentYear);
+          if (normalized) {
+            setFeeRecords(prev => {
+              const withoutDuplicate = prev.filter(r => !(r.studentId === normalized.studentId && r.month === normalized.month && r.year === normalized.year));
+              return [...withoutDuplicate, normalized];
+            });
+            setLastReceipt({ name: student.fullName, amount: payingNow, balance: normalized.balanceRemaining, receipt: normalized.receiptNumber || receiptNum });
+          } else {
+            const newRecord: FeeRecord = {
+              id: `f-${Date.now()}`,
+              studentId: paymentStudentId,
+              month: paymentMonth,
+              year: paymentYear,
+              monthlyFee: student.discountedFee,
+              prevBalance: prevBal,
+              totalDue: due,
+              paidAmount: payingNow,
+              balanceRemaining: Math.max(0, bal),
+              status,
+              paymentDate,
+              paymentMethod,
+              receiptNumber: receiptNum,
+              notes: paymentNotes,
+            };
+            setFeeRecords(prev => [...prev, newRecord]);
+            setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, bal), receipt: receiptNum });
+          }
+        } else {
+          const newRecord: FeeRecord = {
+            id: `f-${Date.now()}`,
+            studentId: paymentStudentId,
+            month: paymentMonth,
+            year: paymentYear,
+            monthlyFee: student.discountedFee,
+            prevBalance: prevBal,
+            totalDue: due,
+            paidAmount: payingNow,
+            balanceRemaining: Math.max(0, bal),
+            status,
+            paymentDate,
+            paymentMethod,
+            receiptNumber: receiptNum,
+            notes: paymentNotes,
+          };
+          setFeeRecords(prev => [...prev, newRecord]);
+          setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, bal), receipt: receiptNum });
+        }
+      }
+    } catch (err) {
+      console.error('Error saving payment:', err);
       const prevBal = existingRecord?.prevBalance || 0;
       const due = student.discountedFee + prevBal;
       const bal = due - payingNow;
       const status: FeeRecord['status'] = bal <= 0 ? (payingNow > due ? 'Advance' : 'Paid') : payingNow > 0 ? 'Partial' : 'Unpaid';
-      const newRecord: FeeRecord = {
-        id: `f-${Date.now()}`, studentId: paymentStudentId, month: paymentMonth, year: paymentYear,
-        monthlyFee: student.discountedFee, prevBalance: prevBal, totalDue: due,
-        paidAmount: payingNow, balanceRemaining: Math.max(0, bal), status,
-        paymentDate, paymentMethod, receiptNumber: receiptNum, notes: paymentNotes,
-      };
-      if (existingRecord) {
+      
+      if (existingRecord && isBalancePayment) {
+        const newPaid = existingRecord.paidAmount + payingNow;
+        const newBalance = existingRecord.totalDue - newPaid;
+        const newStatus: FeeRecord['status'] = newBalance <= 0 ? (newPaid > existingRecord.totalDue ? 'Advance' : 'Paid') : 'Partial';
+        setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? {
+          ...r, paidAmount: newPaid, balanceRemaining: Math.max(0, newBalance), status: newStatus,
+          paymentDate: paymentDate, paymentMethod: paymentMethod, receiptNumber: receiptNum, notes: paymentNotes || r.notes,
+        } : r));
+        setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, newBalance), receipt: receiptNum });
+      } else if (existingRecord) {
+        const newRecord: FeeRecord = {
+          ...existingRecord,
+          monthlyFee: student.discountedFee,
+          prevBalance: prevBal,
+          totalDue: due,
+          paidAmount: payingNow,
+          balanceRemaining: Math.max(0, bal),
+          status,
+          paymentDate,
+          paymentMethod,
+          receiptNumber: receiptNum,
+          notes: paymentNotes,
+        };
         setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? newRecord : r));
+        setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, bal), receipt: receiptNum });
       } else {
+        const newRecord: FeeRecord = {
+          id: `f-${Date.now()}`,
+          studentId: paymentStudentId,
+          month: paymentMonth,
+          year: paymentYear,
+          monthlyFee: student.discountedFee,
+          prevBalance: prevBal,
+          totalDue: due,
+          paidAmount: payingNow,
+          balanceRemaining: Math.max(0, bal),
+          status,
+          paymentDate,
+          paymentMethod,
+          receiptNumber: receiptNum,
+          notes: paymentNotes,
+        };
         setFeeRecords(prev => [...prev, newRecord]);
+        setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, bal), receipt: receiptNum });
       }
-      setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, bal), receipt: receiptNum });
     }
 
     setShowPaymentModal(false);
@@ -315,9 +625,13 @@ const FeeCollection: React.FC = () => {
           </div>
           {/* Filters */}
           <div className="flex flex-wrap gap-2">
-            <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
-              <option>All Classes</option>
-              {CLASS_OPTIONS.map(c => <option key={c}>{c}</option>)}
+            <select value={classFilterId} onChange={e => setClassFilterId(e.target.value)} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
+              <option value="">All Classes</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
               <option>All Status</option>
@@ -460,9 +774,20 @@ const FeeCollection: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-foreground">Filter by Class</label>
-                <select value={paymentClassFilter} onChange={e => { setPaymentClassFilter(e.target.value); setPaymentStudentId(''); }} className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1">
-                  <option>All Classes</option>
-                  {CLASS_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                  <select
+                    value={paymentClassId}
+                    onChange={e => {
+                      setPaymentClassId(e.target.value);
+                      setPaymentStudentId('');
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1"
+                  >
+                    <option value="">All Classes</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div>

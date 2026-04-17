@@ -10,11 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, CheckCircle, Clock, DollarSign, Pencil, Trash2, Receipt } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
-import { STAFF_ROLES, PAYMENT_METHODS, generateSalaryReceipt, StaffMember, SalaryRecord } from '@/data/staff';
+import { PAYMENT_METHODS, generateSalaryReceipt, StaffMember, SalaryRecord } from '@/data/staff';
 import { formatRs, formatDate, MONTHS } from '@/data/students';
 
+const API_BASE_URL = 'http://localhost:4000/api/v1';
+
 const StaffSalary = () => {
-  const { staff, setStaff, salaryRecords, setSalaryRecords } = useAppContext();
+  const { staff, setStaff, staffRoles, salaryRecords, setSalaryRecords, authToken } = useAppContext();
   const [selectedMonth, setSelectedMonth] = useState('March');
   const [selectedYear, setSelectedYear] = useState(2025);
 
@@ -26,6 +28,7 @@ const StaffSalary = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
   const [inactiveOpen, setInactiveOpen] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const [currentStaff, setCurrentStaff] = useState<StaffMember | null>(null);
   const [currentReceipt, setCurrentReceipt] = useState<SalaryRecord | null>(null);
@@ -40,12 +43,25 @@ const StaffSalary = () => {
   // Derived
   const activeStaff = staff.filter(s => s.status === 'Active');
   const totalPayroll = activeStaff.reduce((s, m) => s + m.monthlySalary, 0);
-  const paidThisMonth = staff.filter(s => salaryRecords.some(r => r.staffId === s.id && r.month === selectedMonth && r.year === selectedYear));
-  const pendingStaff = activeStaff.filter(s => !salaryRecords.some(r => r.staffId === s.id && r.month === selectedMonth && r.year === selectedYear));
+  const getSalaryRecordForPeriod = (staffId: string) => {
+    const recs = salaryRecords.filter(r => r.staffId === staffId && r.month === selectedMonth && r.year === selectedYear);
+    if (recs.length === 0) return null;
+    const paid = recs.find(r => (r.status ?? 'Paid') === 'Paid');
+    return paid || recs[0];
+  };
 
-  const isPaid = (staffId: string) => salaryRecords.some(r => r.staffId === staffId && r.month === selectedMonth && r.year === selectedYear);
+  const isPaid = (staffId: string) => {
+    const rec = getSalaryRecordForPeriod(staffId);
+    return !!rec && (rec.status ?? 'Paid') === 'Paid';
+  };
+
+  const paidThisMonth = staff.filter(s => isPaid(s.id));
+  const pendingStaff = activeStaff.filter(s => !isPaid(s.id));
+
   const getLastPaid = (staffId: string) => {
-    const recs = salaryRecords.filter(r => r.staffId === staffId).sort((a, b) => b.year - a.year || MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month));
+    const recs = salaryRecords
+      .filter(r => r.staffId === staffId && (r.status ?? 'Paid') === 'Paid')
+      .sort((a, b) => b.year - a.year || MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month));
     return recs.length > 0 ? `${recs[0].month.slice(0, 3)}-${recs[0].year}` : '—';
   };
 
@@ -57,21 +73,111 @@ const StaffSalary = () => {
     setEditOpen(true);
   };
 
-  const saveStaff = (isEdit: boolean) => {
+  const saveStaff = async (isEdit: boolean) => {
     if (!form.fullName || !form.fatherName || !form.role || !form.monthlySalary || !form.joinDate) return;
-    const data: StaffMember = {
-      id: isEdit && currentStaff ? currentStaff.id : `s${Date.now()}`,
-      fullName: form.fullName, fatherName: form.fatherName, role: form.role, gender: form.gender,
-      monthlySalary: Number(form.monthlySalary), joinDate: form.joinDate, phone: form.phone, cnic: form.cnic,
-      dateOfBirth: form.dateOfBirth, qualification: form.qualification, address: form.address, notes: form.notes,
-      status: isEdit && currentStaff ? currentStaff.status : 'Active',
+
+    const payload: Record<string, unknown> = {
+      full_name: form.fullName,
+      father_name: form.fatherName,
+      role: form.role,
+      monthly_salary: Number(form.monthlySalary),
+      join_date: form.joinDate,
     };
-    if (isEdit && currentStaff) {
-      setStaff(prev => prev.map(s => s.id === currentStaff.id ? data : s));
-    } else {
-      setStaff(prev => [...prev, data]);
+
+    if (form.gender) payload.gender = form.gender;
+    if (form.phone) payload.phone = form.phone;
+    if (form.cnic) payload.cnic = form.cnic;
+    if (form.dateOfBirth) payload.date_of_birth = form.dateOfBirth;
+    if (form.qualification) payload.qualification = form.qualification;
+    if (form.address) payload.address = form.address;
+    if (form.notes) payload.notes = form.notes;
+
+    const mapToUi = (item: any): StaffMember => {
+      const statusRaw = String(item?.status ?? (isEdit && currentStaff ? currentStaff.status : 'Active'));
+      const status: 'Active' | 'Inactive' = statusRaw === 'Inactive' ? 'Inactive' : 'Active';
+
+      return {
+        id: String(item?.id ?? item?._id ?? (isEdit && currentStaff ? currentStaff.id : `s-${Date.now()}`)),
+        fullName: item?.full_name ?? item?.fullName ?? form.fullName,
+        fatherName: item?.father_name ?? item?.fatherName ?? form.fatherName,
+        role: item?.role ?? form.role,
+        gender: item?.gender ?? form.gender,
+        monthlySalary: Number(item?.monthly_salary ?? item?.monthlySalary ?? Number(form.monthlySalary)) || 0,
+        joinDate: item?.join_date ?? item?.joinDate ?? form.joinDate,
+        phone: item?.phone ?? form.phone,
+        cnic: item?.cnic ?? form.cnic,
+        dateOfBirth: item?.date_of_birth ?? item?.dateOfBirth ?? form.dateOfBirth,
+        qualification: item?.qualification ?? form.qualification,
+        address: item?.address ?? form.address,
+        notes: item?.notes ?? form.notes,
+        status,
+        inactiveDate: item?.inactive_date ?? item?.inactiveDate,
+        inactiveReason: item?.inactive_reason ?? item?.inactiveReason,
+      };
+    };
+
+    try {
+      setApiError(null);
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const url = isEdit && currentStaff ? `${API_BASE_URL}/staff/${currentStaff.id}` : `${API_BASE_URL}/staff`;
+      const response = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let message = isEdit ? 'Failed to update staff member' : 'Failed to create staff member';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+      const mapped = mapToUi(result?.staff ?? result?.data ?? result);
+
+      if (isEdit && currentStaff) {
+        setStaff(prev => prev.map(s => (s.id === currentStaff.id ? mapped : s)));
+      } else {
+        setStaff(prev => [...prev, mapped]);
+      }
+
+      setAddOpen(false);
+      setEditOpen(false);
+    } catch {
+      // Fallback to local update if backend is unavailable
+      const fallback: StaffMember = {
+        id: isEdit && currentStaff ? currentStaff.id : `s${Date.now()}`,
+        fullName: form.fullName,
+        fatherName: form.fatherName,
+        role: form.role,
+        gender: form.gender,
+        monthlySalary: Number(form.monthlySalary),
+        joinDate: form.joinDate,
+        phone: form.phone,
+        cnic: form.cnic,
+        dateOfBirth: form.dateOfBirth,
+        qualification: form.qualification,
+        address: form.address,
+        notes: form.notes,
+        status: isEdit && currentStaff ? currentStaff.status : 'Active',
+      };
+      if (isEdit && currentStaff) {
+        setStaff(prev => prev.map(s => (s.id === currentStaff.id ? fallback : s)));
+      } else {
+        setStaff(prev => [...prev, fallback]);
+      }
+      setAddOpen(false);
+      setEditOpen(false);
     }
-    setAddOpen(false); setEditOpen(false);
   };
 
   const handlePay = (s: StaffMember) => {
@@ -80,28 +186,141 @@ const StaffSalary = () => {
     setPayOpen(true);
   };
 
-  const confirmPay = () => {
+  const confirmPay = async () => {
     if (!currentStaff || !payForm.amount) return;
-    const receipt = generateSalaryReceipt();
-    const record: SalaryRecord = {
-      id: `sal${Date.now()}`, staffId: currentStaff.id, month: payForm.month, year: Number(payForm.year),
-      amount: Number(payForm.amount), paymentDate: payForm.paymentDate, paymentMethod: payForm.paymentMethod,
-      receiptNumber: receipt, notes: payForm.notes,
-    };
-    setSalaryRecords(prev => [...prev, record]);
-    setPayOpen(false);
-    setSuccessData({ name: currentStaff.fullName, month: `${payForm.month} ${payForm.year}`, amount: Number(payForm.amount), receipt });
-    setSuccessOpen(true);
+
+    try {
+      setApiError(null);
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const payload = {
+        staffId: currentStaff.id,
+        month: payForm.month,
+        year: Number(payForm.year),
+        amount: Number(payForm.amount),
+        paymentDate: payForm.paymentDate,
+        paymentMethod: payForm.paymentMethod,
+        notes: payForm.notes,
+      };
+
+      const response = await fetch(`${API_BASE_URL}/salaries`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to record salary payment';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+      const created = result?.salary ?? result?.data ?? result;
+      const receipt = created?.receipt_number ?? created?.receiptNumber ?? generateSalaryReceipt();
+      const createdRecord: SalaryRecord = {
+        id: String(created?.id ?? created?._id ?? `sal${Date.now()}`),
+        staffId: String(created?.staff_id ?? created?.staffId ?? currentStaff.id),
+        month:
+          typeof created?.month === 'number'
+            ? MONTHS[created.month - 1] ?? payForm.month
+            : created?.month ?? payForm.month,
+        year: Number(created?.year ?? payForm.year),
+        amount: Number(created?.amount ?? payForm.amount),
+        status: created?.status === 'Payable' ? 'Payable' : 'Paid',
+        paymentDate: created?.payment_date ?? created?.paymentDate ?? payForm.paymentDate,
+        paymentMethod: created?.payment_method ?? created?.paymentMethod ?? payForm.paymentMethod,
+        receiptNumber: receipt,
+        notes: created?.notes ?? payForm.notes,
+      };
+
+      setSalaryRecords(prev => {
+        const byId = prev.find(r => r.id === createdRecord.id);
+        if (byId) {
+          return prev.map(r => (r.id === createdRecord.id ? createdRecord : r));
+        }
+
+        const samePeriod = prev.find(
+          r => r.staffId === createdRecord.staffId && r.month === createdRecord.month && r.year === createdRecord.year
+        );
+        if (samePeriod) {
+          return prev.map(r =>
+            r.staffId === createdRecord.staffId && r.month === createdRecord.month && r.year === createdRecord.year
+              ? createdRecord
+              : r
+          );
+        }
+
+        return [...prev, createdRecord];
+      });
+      setPayOpen(false);
+      setSuccessData({ name: currentStaff.fullName, month: `${createdRecord.month} ${createdRecord.year}`, amount: createdRecord.amount, receipt });
+      setSuccessOpen(true);
+    } catch {
+      // Fallback to local record if backend is unavailable
+      const receipt = generateSalaryReceipt();
+      const record: SalaryRecord = {
+        id: `sal${Date.now()}`,
+        staffId: currentStaff.id,
+        month: payForm.month,
+        year: Number(payForm.year),
+        amount: Number(payForm.amount),
+        status: 'Paid',
+        paymentDate: payForm.paymentDate,
+        paymentMethod: payForm.paymentMethod,
+        receiptNumber: receipt,
+        notes: payForm.notes,
+      };
+      setSalaryRecords(prev => [...prev, record]);
+      setPayOpen(false);
+      setSuccessData({ name: currentStaff.fullName, month: `${payForm.month} ${payForm.year}`, amount: Number(payForm.amount), receipt });
+      setSuccessOpen(true);
+    }
   };
 
   const handleReceipt = (s: StaffMember) => {
-    const rec = salaryRecords.find(r => r.staffId === s.id && r.month === selectedMonth && r.year === selectedYear);
+    const rec = salaryRecords.find(r => r.staffId === s.id && r.month === selectedMonth && r.year === selectedYear && (r.status ?? 'Paid') === 'Paid');
     if (rec) { setCurrentStaff(s); setCurrentReceipt(rec); setReceiptOpen(true); }
   };
 
   const handleDelete = (s: StaffMember) => { setCurrentStaff(s); setDeleteOpen(true); };
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!currentStaff) return;
+
+    try {
+      setApiError(null);
+      const headers: HeadersInit = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await fetch(`${API_BASE_URL}/staff/${currentStaff.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to delete staff member';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+    } catch {
+      // Fall back to local delete if backend is unavailable
+    }
+
     setStaff(prev => prev.filter(s => s.id !== currentStaff.id));
     setSalaryRecords(prev => prev.filter(r => r.staffId !== currentStaff.id));
     setDeleteOpen(false);
@@ -111,10 +330,55 @@ const StaffSalary = () => {
     setInactiveForm({ date: new Date().toISOString().split('T')[0], reason: '' });
     setInactiveOpen(true);
   };
-  const confirmInactive = () => {
+  const confirmInactive = async () => {
     if (!currentStaff) return;
+
+    try {
+      setApiError(null);
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await fetch(`${API_BASE_URL}/staff/${currentStaff.id}/deactivate`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ date: inactiveForm.date, reason: inactiveForm.reason }),
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to deactivate staff member';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+      const updated = result?.staff ?? result?.data ?? result;
+      setStaff(prev => prev.map(s =>
+        s.id === currentStaff.id
+          ? {
+              ...s,
+              status: (updated?.status === 'Inactive' ? 'Inactive' : 'Active') as 'Active' | 'Inactive',
+              inactiveDate: updated?.inactive_date ?? updated?.inactiveDate ?? inactiveForm.date,
+              inactiveReason: updated?.inactive_reason ?? updated?.inactiveReason ?? inactiveForm.reason,
+            }
+          : s
+      ));
+      setInactiveOpen(false);
+      setEditOpen(false);
+      return;
+    } catch {
+      // Fall back to local deactivate if backend is unavailable
+    }
+
     setStaff(prev => prev.map(s => s.id === currentStaff.id ? { ...s, status: 'Inactive' as const, inactiveDate: inactiveForm.date, inactiveReason: inactiveForm.reason } : s));
-    setInactiveOpen(false); setEditOpen(false);
+    setInactiveOpen(false);
+    setEditOpen(false);
   };
 
   const stats = [
@@ -131,7 +395,7 @@ const StaffSalary = () => {
       <div><Label>Role *</Label>
         <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v }))}>
           <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-          <SelectContent>{STAFF_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+          <SelectContent>{staffRoles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div><Label>Gender</Label>
@@ -168,6 +432,12 @@ const StaffSalary = () => {
           <Button onClick={handleAdd} className="bg-teal text-teal-foreground hover:bg-teal/90">+ Add Staff</Button>
         </div>
       </div>
+
+      {apiError && (
+        <Card className="border-destructive/50">
+          <CardContent className="p-3 text-sm text-destructive">{apiError}</CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
