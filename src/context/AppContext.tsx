@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, FeeRecord, initialStudents, initialFeeRecords } from '@/data/students';
 import { StaffMember, SalaryRecord, Expense, STAFF_ROLES, initialStaff, initialSalaryRecords, initialExpenses } from '@/data/staff';
 
+const API_BASE_URL = 'http://localhost:4000/api/v1';
+
 interface AppContextType {
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
@@ -9,6 +11,10 @@ interface AppContextType {
   setFeeRecords: React.Dispatch<React.SetStateAction<FeeRecord[]>>;
   isLoggedIn: boolean;
   setIsLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
+  userId: string | null;
+  setUserId: React.Dispatch<React.SetStateAction<string | null>>;
+  userEmail: string;
+  setUserEmail: React.Dispatch<React.SetStateAction<string>>;
   userRole: string;
   setUserRole: React.Dispatch<React.SetStateAction<string>>;
   userName: string;
@@ -31,6 +37,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(initialFeeRecords);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('admin');
   const [userName, setUserName] = useState('Muhammad Hassan');
    const [authToken, setAuthToken] = useState<string | null>(() => {
@@ -59,7 +67,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers['Authorization'] = `Bearer ${authToken}`;
         }
 
-        const response = await fetch('http://localhost:4000/api/v1/students', { headers });
+        const response = await fetch(`${API_BASE_URL}/students`, { headers });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -163,7 +171,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers['Authorization'] = `Bearer ${authToken}`;
         }
 
-        const response = await fetch('http://localhost:4000/api/v1/staff', { headers });
+        const response = await fetch(`${API_BASE_URL}/staff`, { headers });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -225,7 +233,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers['Authorization'] = `Bearer ${authToken}`;
         }
 
-        const response = await fetch('http://localhost:4000/api/v1/salaries', { headers });
+        const response = await fetch(`${API_BASE_URL}/salaries`, { headers });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -284,6 +292,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [authToken]);
 
   useEffect(() => {
+    const loadExpensesFromApi = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/expenses`, { headers });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const list = Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : Array.isArray((data as any)?.expenses)
+          ? (data as any).expenses
+          : Array.isArray(data)
+          ? data
+          : [];
+
+        if (!Array.isArray(list)) return;
+
+        const mapped: Expense[] = list.map((item: any, index: number) => ({
+          id: String(item?.id ?? item?._id ?? `exp-${index + 1}`),
+          date: item?.date ?? '',
+          category: item?.category ?? 'Other',
+          description: item?.description ?? '',
+          amount: Number(item?.amount ?? 0) || 0,
+          paymentMethod: item?.payment_method ?? item?.paymentMethod ?? 'Cash',
+          paidTo: item?.paid_to ?? item?.paidTo ?? '',
+          receiptRef: item?.receipt_ref ?? item?.receiptRef ?? '',
+          recordedBy: item?.recorded_by_name ?? item?.recorded_by ?? item?.recordedBy ?? 'Admin',
+          notes: item?.notes ?? '',
+        }));
+
+        setExpenses(mapped);
+      } catch {
+        // If backend is unavailable, keep initial demo data
+      }
+    };
+
+    loadExpensesFromApi();
+  }, [authToken]);
+
+  useEffect(() => {
     const loadFeesFromApi = async () => {
       try {
         const headers: HeadersInit = {};
@@ -291,7 +343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers['Authorization'] = `Bearer ${authToken}`;
         }
 
-        const response = await fetch('http://localhost:4000/api/v1/fees', { headers });
+        const response = await fetch(`${API_BASE_URL}/fees`, { headers });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -352,7 +404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [authToken]);
 
   return (
-    <AppContext.Provider value={{ students, setStudents, feeRecords, setFeeRecords, isLoggedIn, setIsLoggedIn, userRole, setUserRole, userName, setUserName, authToken, setAuthToken, staff, setStaff, staffRoles, setStaffRoles, salaryRecords, setSalaryRecords, expenses, setExpenses }}>
+    <AppContext.Provider value={{ students, setStudents, feeRecords, setFeeRecords, isLoggedIn, setIsLoggedIn, userId, setUserId, userEmail, setUserEmail, userRole, setUserRole, userName, setUserName, authToken, setAuthToken, staff, setStaff, staffRoles, setStaffRoles, salaryRecords, setSalaryRecords, expenses, setExpenses }}>
       {children}
     </AppContext.Provider>
   );

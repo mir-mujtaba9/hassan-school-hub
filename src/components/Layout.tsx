@@ -27,7 +27,7 @@ const pageTitles: Record<string, string> = {
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setIsLoggedIn, setAuthToken, userRole, userName, authToken } = useAppContext();
+  const { setIsLoggedIn, setAuthToken, setUserId, setUserEmail, userRole, userName, authToken } = useAppContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const currentPath = location.pathname;
@@ -55,6 +55,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       // Ignore logout API errors and still clear local auth state.
     } finally {
       setAuthToken(null);
+      setUserId(null);
+      setUserEmail('');
       setIsLoggedIn(false);
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem('authToken');

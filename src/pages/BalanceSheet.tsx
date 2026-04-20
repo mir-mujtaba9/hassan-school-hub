@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Printer, Download } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { formatRs, MONTHS } from '@/data/students';
-import { EXPENSE_CATEGORIES } from '@/data/staff';
+
+const API_BASE_URL = 'http://localhost:4000/api/v1';
 
 const CLASS_GROUPS = [
   { label: 'Nursery', classes: ['Nursery'], stdFee: 800 },
@@ -18,12 +19,106 @@ const CLASS_GROUPS = [
   { label: 'Class 9-10', classes: ['Class 9', 'Class 10'], stdFee: 2000 },
 ];
 
+type BalanceSheetReport = {
+  month: string;
+  year: number;
+  income?: {
+    total?: number;
+    byClassGroup?: Array<{
+      label: string;
+      count: number;
+      expected: number;
+      collected: number;
+      due: number;
+    }>;
+  };
+  expenses?: {
+    total?: number;
+    byCategory?: Array<{
+      category: string;
+      entries?: unknown[];
+      total: number;
+    }>;
+  };
+  netBalance?: number;
+};
+
+const extractErrorMessage = async (response: Response, fallback: string) => {
+  let message = fallback;
+  try {
+    const data = await response.json();
+    if (typeof (data as any)?.error === 'string') message = (data as any).error;
+    else if (typeof (data as any)?.message === 'string') message = (data as any).message;
+  } catch {
+    // ignore parse errors
+  }
+  return message;
+};
+
 const BalanceSheet = () => {
-  const { students, feeRecords, staff, salaryRecords, expenses } = useAppContext();
+  const { students, feeRecords, staff, salaryRecords, expenses, authToken } = useAppContext();
   const [selectedMonth, setSelectedMonth] = useState('March');
   const [selectedYear, setSelectedYear] = useState(2025);
 
+  const [report, setReport] = useState<BalanceSheetReport | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [cacheStatus, setCacheStatus] = useState<string | null>(null);
+
   const monthIdx = MONTHS.indexOf(selectedMonth);
+
+  const loadReport = async (signal?: AbortSignal) => {
+    try {
+      setIsReportLoading(true);
+      setReportError(null);
+
+      const params = new URLSearchParams();
+      params.set('month', selectedMonth);
+      params.set('year', String(selectedYear));
+
+      const headers: HeadersInit = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await fetch(`${API_BASE_URL}/reports/balance-sheet?${params.toString()}`, {
+        headers,
+        signal,
+      });
+
+      if (!response.ok) {
+        const msg = await extractErrorMessage(response, 'Failed to load balance sheet report');
+        setReportError(msg);
+        setCacheStatus(null);
+        setReport(null);
+        return;
+      }
+
+      const xCache = response.headers.get('X-Cache');
+      setCacheStatus(xCache);
+
+      const data = (await response.json().catch(() => null)) as BalanceSheetReport | null;
+      if (!data || typeof data !== 'object') {
+        setReportError('Invalid report response');
+        setReport(null);
+        return;
+      }
+
+      setReport(data);
+    } catch (err) {
+      if ((err as any)?.name === 'AbortError') return;
+      setReportError('Unable to connect to server. Showing local calculations.');
+      setCacheStatus(null);
+      setReport(null);
+    } finally {
+      setIsReportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadReport(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth, selectedYear, authToken]);
 
   // Fee income by class group
   const incomeData = useMemo(() => {
@@ -40,10 +135,25 @@ const BalanceSheet = () => {
     });
   }, [students, feeRecords, selectedMonth, selectedYear]);
 
-  const totalExpected = incomeData.reduce((s, d) => s + d.expected, 0);
-  const totalCollected = incomeData.reduce((s, d) => s + d.collected, 0);
+  const reportIncomeData = useMemo(() => {
+    const list = report?.income?.byClassGroup;
+    if (!Array.isArray(list)) return null;
+    return list.map((d) => ({
+      label: String(d.label ?? ''),
+      count: Number(d.count ?? 0) || 0,
+      feePerStudent: '—',
+      expected: Number(d.expected ?? 0) || 0,
+      collected: Number(d.collected ?? 0) || 0,
+      due: Number(d.due ?? (Number(d.expected ?? 0) - Number(d.collected ?? 0))) || 0,
+    }));
+  }, [report]);
+
+  const displayedIncomeData = reportIncomeData ?? incomeData;
+
+  const totalExpected = displayedIncomeData.reduce((s, d) => s + d.expected, 0);
+  const totalCollected = displayedIncomeData.reduce((s, d) => s + d.collected, 0);
   const totalDue = totalExpected - totalCollected;
-  const totalStudents = incomeData.reduce((s, d) => s + d.count, 0);
+  const totalStudents = displayedIncomeData.reduce((s, d) => s + d.count, 0);
 
   // Salary expenses
   const salaryData = useMemo(() => {
@@ -61,6 +171,17 @@ const BalanceSheet = () => {
 
   // Other expenses
   const otherExpenses = useMemo(() => {
+    const byCategory = report?.expenses?.byCategory;
+    if (Array.isArray(byCategory)) {
+      return byCategory
+        .filter(c => String(c.category) !== 'Salary')
+        .map(c => ({
+          category: String(c.category ?? 'Other'),
+          entries: Array.isArray(c.entries) ? c.entries.length : 0,
+          total: Number(c.total ?? 0) || 0,
+        }));
+    }
+
     const monthExp = expenses.filter(e => {
       const d = new Date(e.date);
       return d.getMonth() === monthIdx && d.getFullYear() === selectedYear;
@@ -75,8 +196,18 @@ const BalanceSheet = () => {
   }, [expenses, monthIdx, selectedYear]);
 
   const totalOtherExpenses = otherExpenses.reduce((s, d) => s + d.total, 0);
-  const totalExpenses = paidSalary + totalOtherExpenses;
-  const netBalance = totalCollected - totalExpenses;
+
+  const reportSalaryTotal = useMemo(() => {
+    const byCategory = report?.expenses?.byCategory;
+    if (!Array.isArray(byCategory)) return null;
+    const salaryRow = byCategory.find(c => String(c.category) === 'Salary');
+    if (!salaryRow) return 0;
+    return Number((salaryRow as any)?.total ?? 0) || 0;
+  }, [report]);
+
+  const displayedSalaryTotal = reportSalaryTotal == null ? paidSalary : reportSalaryTotal;
+  const totalExpenses = report?.expenses?.total != null ? Number(report.expenses.total) || 0 : displayedSalaryTotal + totalOtherExpenses;
+  const netBalance = report?.netBalance != null ? Number(report.netBalance) || 0 : totalCollected - totalExpenses;
 
   return (
     <div className="space-y-6">
@@ -92,10 +223,21 @@ const BalanceSheet = () => {
             <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
             <SelectContent>{[2024, 2025, 2026].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
           </Select>
+          {isReportLoading && <Badge className="bg-muted text-muted-foreground">Loading…</Badge>}
+          {cacheStatus === 'HIT' && <Badge className="bg-success text-success-foreground">Cached</Badge>}
           <Button variant="outline" onClick={() => window.print()}><Printer size={16} className="mr-1" />Print</Button>
           <Button className="bg-teal text-teal-foreground hover:bg-teal/90"><Download size={16} className="mr-1" />Export</Button>
         </div>
       </div>
+
+      {reportError && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-destructive/5 border border-destructive/30 rounded-md px-3 py-2">
+          <p className="text-xs text-destructive">{reportError}</p>
+          <Button size="sm" variant="outline" onClick={() => loadReport()} disabled={isReportLoading}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Net Summary Banner */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -110,7 +252,7 @@ const BalanceSheet = () => {
           <CardContent className="p-6 text-center">
             <p className="text-sm opacity-80">TOTAL EXPENSES</p>
             <p className="text-3xl font-bold">{formatRs(totalExpenses)}</p>
-            <p className="text-sm opacity-80">Salary {formatRs(paidSalary)} + Other {formatRs(totalOtherExpenses)}</p>
+            <p className="text-sm opacity-80">Salary {formatRs(displayedSalaryTotal)} + Other {formatRs(totalOtherExpenses)}</p>
           </CardContent>
         </Card>
         <Card className={`border-0 ${netBalance >= 0 ? 'bg-success text-success-foreground' : 'bg-destructive text-destructive-foreground'}`}>
@@ -136,7 +278,7 @@ const BalanceSheet = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {incomeData.map(d => (
+              {displayedIncomeData.map(d => (
                 <TableRow key={d.label}>
                   <TableCell className="font-medium">{d.label}</TableCell>
                   <TableCell>{d.count}</TableCell>

@@ -12,7 +12,7 @@ import FeeCollection from "@/pages/FeeCollection";
 import StaffSalary from "@/pages/StaffSalary";
 import Expenses from "@/pages/Expenses";
 import BalanceSheet from "@/pages/BalanceSheet";
-import UserManagement from "@/pages/UserManagement";
+import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();

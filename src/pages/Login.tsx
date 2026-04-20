@@ -10,7 +10,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { setIsLoggedIn, setUserRole, setUserName, setAuthToken } = useAppContext();
+  const { setIsLoggedIn, setUserRole, setUserName, setAuthToken, setUserId, setUserEmail } = useAppContext();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -41,9 +41,13 @@ const Login: React.FC = () => {
         const token =
           (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
           (data?.data && (data.data.token || data.data.accessToken));
+
+        const user = data?.user ?? data?.data?.user ?? null;
         setIsLoggedIn(true);
         setUserRole('admin');
-        setUserName(data?.user?.name || email);
+        setUserName(user?.full_name || user?.fullName || user?.name || email);
+        setUserEmail(String(user?.email ?? email));
+        setUserId(user?.id ? String(user.id) : user?._id ? String(user._id) : null);
         if (token && typeof token === 'string') {
           setAuthToken(token);
         }
@@ -65,9 +69,13 @@ const Login: React.FC = () => {
         const token =
           (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
           (data?.data && (data.data.token || data.data.accessToken));
+
+        const user = data?.user ?? data?.data?.user ?? null;
         setIsLoggedIn(true);
         setUserRole('teacher');
-        setUserName(data?.user?.name || email);
+        setUserName(user?.full_name || user?.fullName || user?.name || email);
+        setUserEmail(String(user?.email ?? email));
+        setUserId(user?.id ? String(user.id) : user?._id ? String(user._id) : null);
         if (token && typeof token === 'string') {
           setAuthToken(token);
         }
@@ -78,9 +86,8 @@ const Login: React.FC = () => {
       let errorMessage = 'Invalid email or password';
       try {
         const errorData = await response.json();
-        if (typeof errorData?.message === 'string') {
-          errorMessage = errorData.message;
-        }
+        if (typeof errorData?.error === 'string') errorMessage = errorData.error;
+        else if (typeof errorData?.message === 'string') errorMessage = errorData.message;
       } catch {
         // ignore JSON parse errors
       }

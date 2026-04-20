@@ -13,6 +13,8 @@ import { useAppContext } from '@/context/AppContext';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS, Expense } from '@/data/staff';
 import { formatRs, formatDate, MONTHS } from '@/data/students';
 
+const API_BASE_URL = 'http://localhost:4000/api/v1';
+
 const CATEGORY_COLORS: Record<string, string> = {
   Utilities: 'bg-teal text-teal-foreground',
   Maintenance: 'bg-warning text-warning-foreground',
@@ -25,14 +27,31 @@ const CATEGORY_DOTS: Record<string, string> = {
   Utilities: 'bg-teal', Maintenance: 'bg-warning', Supplies: 'bg-success', Transport: 'bg-info', Salary: 'bg-primary', Other: 'bg-muted-foreground',
 };
 
+const mapApiExpenseToUi = (item: any, fallbackId: string): Expense => ({
+  id: String(item?.id ?? item?._id ?? fallbackId),
+  date: item?.date ?? '',
+  category: item?.category ?? 'Other',
+  description: item?.description ?? '',
+  amount: Number(item?.amount ?? 0) || 0,
+  paymentMethod: item?.payment_method ?? item?.paymentMethod ?? 'Cash',
+  paidTo: item?.paid_to ?? item?.paidTo ?? '',
+  receiptRef: item?.receipt_ref ?? item?.receiptRef ?? '',
+  recordedBy: item?.recorded_by_name ?? item?.recorded_by ?? item?.recordedBy ?? 'Admin',
+  notes: item?.notes ?? '',
+});
+
 const Expenses = () => {
-  const { expenses, setExpenses } = useAppContext();
+  const { expenses, setExpenses, authToken } = useAppContext();
   const [selectedMonth, setSelectedMonth] = useState('March');
   const [selectedYear, setSelectedYear] = useState(2025);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [current, setCurrent] = useState<Expense | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFilterLoading, setIsFilterLoading] = useState(false);
+  const [serverFilteredExpenses, setServerFilteredExpenses] = useState<Expense[] | null>(null);
 
   // Filters
   const [filterCat, setFilterCat] = useState('All');
@@ -51,15 +70,17 @@ const Expenses = () => {
     });
   }, [expenses, selectedMonth, selectedYear]);
 
+  const baseFilteredSource = serverFilteredExpenses ?? monthExpenses;
+
   const filtered = useMemo(() => {
-    return monthExpenses.filter(e => {
-      if (filterCat !== 'All' && e.category !== filterCat) return false;
+    return baseFilteredSource.filter(e => {
+      if (!serverFilteredExpenses && filterCat !== 'All' && e.category !== filterCat) return false;
       if (filterFrom && e.date < filterFrom) return false;
       if (filterTo && e.date > filterTo) return false;
       if (search && !e.description.toLowerCase().includes(search.toLowerCase()) && !e.paidTo.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [monthExpenses, filterCat, filterFrom, filterTo, search]);
+  }, [baseFilteredSource, filterCat, filterFrom, filterTo, search, serverFilteredExpenses]);
 
   const thisMonthTotal = monthExpenses.reduce((s, e) => s + e.amount, 0);
   // "Last month" — simple approximation
@@ -80,8 +101,128 @@ const Expenses = () => {
   };
   const handleDelete = (e: Expense) => { setCurrent(e); setDeleteOpen(true); };
 
-  const saveExpense = (isEdit: boolean) => {
+  const applyServerFilters = async () => {
+    try {
+      setApiError(null);
+      setIsFilterLoading(true);
+
+      const params = new URLSearchParams();
+      params.set('month', selectedMonth);
+      params.set('year', String(selectedYear));
+      if (filterCat !== 'All') {
+        params.set('category', filterCat);
+      }
+
+      const headers: HeadersInit = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await fetch(`${API_BASE_URL}/expenses?${params.toString()}`, { headers });
+      if (!response.ok) {
+        let message = 'Failed to fetch filtered expenses';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+
+      const result = await response.json();
+      const list = Array.isArray((result as any)?.data)
+        ? (result as any).data
+        : Array.isArray((result as any)?.expenses)
+        ? (result as any).expenses
+        : Array.isArray(result)
+        ? result
+        : [];
+
+      const mapped = (Array.isArray(list) ? list : []).map((item: any, index: number) =>
+        mapApiExpenseToUi(item, `exp-filter-${index + 1}`)
+      );
+
+      setServerFilteredExpenses(mapped);
+    } catch {
+      setApiError('Unable to fetch filtered expenses. Showing local results.');
+    } finally {
+      setIsFilterLoading(false);
+    }
+  };
+
+  const saveExpense = async (isEdit: boolean) => {
     if (!form.description || !form.amount || !form.category || !form.date) return;
+
+    const fallbackData: Expense = {
+      id: isEdit && current ? current.id : `e${Date.now()}`,
+      date: form.date, category: form.category, description: form.description, amount: Number(form.amount),
+      paymentMethod: form.paymentMethod, paidTo: form.paidTo, receiptRef: form.receiptRef, recordedBy: form.recordedBy, notes: form.notes,
+    };
+
+    const payload: Record<string, unknown> = {
+      date: form.date,
+      category: form.category,
+      description: form.description,
+      amount: Number(form.amount),
+    };
+
+    if (form.paymentMethod) payload.paymentMethod = form.paymentMethod;
+    if (form.paidTo) payload.paidTo = form.paidTo;
+    if (form.receiptRef) payload.receiptRef = form.receiptRef;
+    if (form.notes) payload.notes = form.notes;
+
+    try {
+      setApiError(null);
+      setIsSubmitting(true);
+
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const url = isEdit && current ? `${API_BASE_URL}/expenses/${current.id}` : `${API_BASE_URL}/expenses`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let message = isEdit ? 'Failed to update expense' : 'Failed to create expense';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+      const mapped = mapApiExpenseToUi(result?.expense ?? result?.data ?? result, fallbackData.id);
+
+      if (isEdit && current) {
+        setExpenses(prev => prev.map(e => e.id === current.id ? mapped : e));
+      } else {
+        setExpenses(prev => [...prev, mapped]);
+      }
+
+      if (serverFilteredExpenses) {
+        await applyServerFilters();
+      }
+
+      setAddOpen(false);
+      setEditOpen(false);
+      return;
+    } catch {
+      // Fallback to local update if backend is unavailable
+    } finally {
+      setIsSubmitting(false);
+    }
+
     const data: Expense = {
       id: isEdit && current ? current.id : `e${Date.now()}`,
       date: form.date, category: form.category, description: form.description, amount: Number(form.amount),
@@ -95,13 +236,58 @@ const Expenses = () => {
     setAddOpen(false); setEditOpen(false);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!current) return;
+
+    try {
+      setApiError(null);
+      setIsSubmitting(true);
+
+      const headers: HeadersInit = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await fetch(`${API_BASE_URL}/expenses/${current.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to delete expense';
+        try {
+          const errData = await response.json();
+          if (typeof errData?.error === 'string') message = errData.error;
+          else if (typeof errData?.message === 'string') message = errData.message;
+        } catch {
+          // ignore parse errors
+        }
+        setApiError(message);
+        return;
+      }
+
+      setExpenses(prev => prev.filter(e => e.id !== current.id));
+      if (serverFilteredExpenses) {
+        await applyServerFilters();
+      }
+      setDeleteOpen(false);
+      return;
+    } catch {
+      // Fallback to local delete if backend is unavailable
+    } finally {
+      setIsSubmitting(false);
+    }
+
     setExpenses(prev => prev.filter(e => e.id !== current.id));
     setDeleteOpen(false);
   };
 
-  const resetFilters = () => { setFilterCat('All'); setFilterFrom(''); setFilterTo(''); setSearch(''); };
+  const resetFilters = () => {
+    setFilterCat('All');
+    setFilterFrom('');
+    setFilterTo('');
+    setSearch('');
+    setServerFilteredExpenses(null);
+    setApiError(null);
+  };
 
   const stats = [
     { label: 'This Month', value: formatRs(thisMonthTotal), color: 'bg-destructive text-destructive-foreground', icon: TrendingDown },
@@ -179,6 +365,11 @@ const Expenses = () => {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
+          {apiError && (
+            <p className="mb-3 text-xs text-destructive bg-destructive/5 border border-destructive/30 rounded-md px-3 py-1.5">
+              {apiError}
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <Label className="text-xs">Category</Label>
@@ -190,7 +381,9 @@ const Expenses = () => {
             <div><Label className="text-xs">From</Label><Input type="date" className="w-[150px]" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} /></div>
             <div><Label className="text-xs">To</Label><Input type="date" className="w-[150px]" value={filterTo} onChange={e => setFilterTo(e.target.value)} /></div>
             <div><Label className="text-xs">Search</Label><Input className="w-[200px]" placeholder="Search description..." value={search} onChange={e => setSearch(e.target.value)} /></div>
-            <Button size="sm" className="bg-teal text-teal-foreground hover:bg-teal/90" onClick={() => {}}>Apply Filter</Button>
+            <Button size="sm" className="bg-teal text-teal-foreground hover:bg-teal/90" onClick={applyServerFilters} disabled={isFilterLoading}>
+              {isFilterLoading ? 'Applying...' : 'Apply Filter'}
+            </Button>
             <Button size="sm" variant="outline" onClick={resetFilters}>Reset</Button>
           </div>
         </CardContent>
@@ -233,7 +426,7 @@ const Expenses = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add New Expense</DialogTitle><DialogDescription>Record a new expense entry.</DialogDescription></DialogHeader>
           {formFields}
-          <DialogFooter><Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button><Button onClick={() => saveExpense(false)} className="bg-teal text-teal-foreground hover:bg-teal/90">Save Expense</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button><Button onClick={() => saveExpense(false)} disabled={isSubmitting} className="bg-teal text-teal-foreground hover:bg-teal/90">{isSubmitting ? 'Saving...' : 'Save Expense'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -242,7 +435,7 @@ const Expenses = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Expense</DialogTitle><DialogDescription>Update expense details.</DialogDescription></DialogHeader>
           {formFields}
-          <DialogFooter><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button onClick={() => saveExpense(true)} className="bg-teal text-teal-foreground hover:bg-teal/90">Update Expense</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button onClick={() => saveExpense(true)} disabled={isSubmitting} className="bg-teal text-teal-foreground hover:bg-teal/90">{isSubmitting ? 'Updating...' : 'Update Expense'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -251,7 +444,7 @@ const Expenses = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Confirm Delete</DialogTitle><DialogDescription>This action cannot be undone.</DialogDescription></DialogHeader>
           {current && <p className="text-sm">Are you sure you want to delete this expense?<br /><strong>{current.description} — {formatRs(current.amount)}</strong> on {formatDate(current.date)}</p>}
-          <DialogFooter><Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button><Button variant="destructive" onClick={confirmDelete}>Yes, Delete</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button><Button variant="destructive" onClick={confirmDelete} disabled={isSubmitting}>{isSubmitting ? 'Deleting...' : 'Yes, Delete'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
