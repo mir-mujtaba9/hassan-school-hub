@@ -13,7 +13,7 @@ import { useAppContext } from '@/context/AppContext';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS, Expense } from '@/data/staff';
 import { formatRs, formatDate, MONTHS } from '@/data/students';
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const CATEGORY_COLORS: Record<string, string> = {
   Utilities: 'bg-teal text-teal-foreground',

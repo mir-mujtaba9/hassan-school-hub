@@ -8,7 +8,7 @@ type ClassOption = {
   name: string;
 };
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const MONTH_TO_NUM: Record<string, number> = {
   'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,

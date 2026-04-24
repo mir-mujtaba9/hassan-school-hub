@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, FeeRecord, initialStudents, initialFeeRecords } from '@/data/students';
 import { StaffMember, SalaryRecord, Expense, STAFF_ROLES, initialStaff, initialSalaryRecords, initialExpenses } from '@/data/staff';
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 interface AppContextType {
   students: Student[];

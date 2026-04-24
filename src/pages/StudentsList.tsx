@@ -37,7 +37,7 @@ const StudentsList: React.FC = () => {
 
         const params = new URLSearchParams();
         params.set('search', search);
-        const url = `http://localhost:4000/api/v1/students?${params.toString()}`;
+        const url = `${import.meta.env.VITE_API_URL}/students?${params.toString()}`;
 
         const headers: HeadersInit = {};
         if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -116,7 +116,7 @@ const StudentsList: React.FC = () => {
       const headers: HeadersInit = {};
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-      const response = await fetch(`http://localhost:4000/api/v1/students/${student.id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/students/${student.id}`, {
         method: 'DELETE',
         headers,
       });

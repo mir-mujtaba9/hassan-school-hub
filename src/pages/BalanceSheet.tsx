@@ -8,7 +8,7 @@ import { Printer, Download } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { formatRs, MONTHS } from '@/data/students';
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const CLASS_GROUPS = [
   { label: 'Nursery', classes: ['Nursery'], stdFee: 800 },

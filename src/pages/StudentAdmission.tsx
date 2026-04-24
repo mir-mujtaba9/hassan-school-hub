@@ -9,7 +9,7 @@ type ClassOption = {
   name: string;
 };
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const emptyStudent: Omit<Student, 'id'> = {
   fullName: '', fatherName: '', dateOfBirth: '', gender: '', religion: 'Islam', nationality: 'Pakistani',

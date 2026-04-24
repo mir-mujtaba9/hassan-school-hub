@@ -24,7 +24,7 @@ const Login: React.FC = () => {
 
     setIsLoading(true);
 
-    const baseUrl = 'http://localhost:4000/api/v1/auth';
+    const baseUrl = `${import.meta.env.VITE_API_URL}/auth`;
 
     try {
       // Try admin login first

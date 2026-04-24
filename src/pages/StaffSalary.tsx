@@ -13,7 +13,7 @@ import { useAppContext } from '@/context/AppContext';
 import { PAYMENT_METHODS, generateSalaryReceipt, StaffMember, SalaryRecord } from '@/data/staff';
 import { formatRs, formatDate, MONTHS } from '@/data/students';
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const StaffSalary = () => {
   const { staff, setStaff, staffRoles, salaryRecords, setSalaryRecords, authToken } = useAppContext();
