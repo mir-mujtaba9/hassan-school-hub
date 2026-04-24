@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# Hassan School Hub
 
-TODO: Document your project here
+Documentation for Hassan School Hub.
