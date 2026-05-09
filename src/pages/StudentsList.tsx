@@ -299,8 +299,8 @@ const StudentsList: React.FC = () => {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Class</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Monthly Fee</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Discount</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">DOB</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Admission</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contact</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Address</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Actions</th>
               </tr>
@@ -342,8 +342,8 @@ const StudentsList: React.FC = () => {
                     )}
                   </td>
                   <td className="px-4 py-3 text-foreground">{s.discount === 'No Discount' ? 'None' : s.discount}</td>
-                  <td className="px-4 py-3 text-foreground whitespace-nowrap">{formatDate(s.dateOfBirth)}</td>
-                  <td className="px-4 py-3 text-foreground whitespace-nowrap">{formatDate(s.admissionDate)}</td>
+                  <td className="px-4 py-3 text-foreground whitespace-nowrap">{s.fatherPhone || '—'}</td>
+                  <td className="px-4 py-3 text-foreground">{s.homeAddress || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${s.status === 'Active' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                       {s.status}
