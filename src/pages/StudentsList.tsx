@@ -5,6 +5,12 @@ import { Student, formatRs, formatDate } from '@/data/students';
 import { Eye, Pencil, Trash2, Search, Plus, X, ChevronLeft, ChevronRight, Users, UserCheck, UserX, UserPlus } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 10;
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+type ClassOption = {
+  id: string;
+  name: string;
+};
 
 const StudentsList: React.FC = () => {
   const { students, setStudents, feeRecords, userRole, authToken } = useAppContext();
@@ -21,6 +27,78 @@ const StudentsList: React.FC = () => {
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadClasses = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/classes`, { signal: controller.signal, headers });
+        if (!response.ok) {
+          setClasses([]);
+          return;
+        }
+
+        const data = await response.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.classes)
+          ? (data as any).classes
+          : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+
+        const mapped: ClassOption[] = (Array.isArray(list) ? list : [])
+          .map((item: any) => {
+            const rawId = item?.id ?? item?._id ?? item?.class_id ?? item?.value;
+            if (rawId == null) return null;
+
+            const id = String(rawId);
+            const name =
+              item?.name ??
+              item?.class_name ??
+              item?.title ??
+              item?.label ??
+              (typeof item?.class_number === 'number' ? `Class ${item.class_number}` : undefined) ??
+              (typeof item?.class === 'string' ? item.class : undefined) ??
+              `Class ${id}`;
+
+            return { id, name: String(name) };
+          })
+          .filter(Boolean) as ClassOption[];
+
+        setClasses(mapped);
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+        setClasses([]);
+      }
+    };
+
+    loadClasses();
+    return () => controller.abort();
+  }, [authToken]);
+
+  const classNameById = useMemo(() => new Map(classes.map(c => [c.id, c.name] as const)), [classes]);
+
+  const getClassDisplayName = (studentClass: string) => {
+    const rawValue = studentClass?.trim();
+    if (!rawValue) return 'Unknown';
+
+    const exactMatch = classNameById.get(rawValue);
+    if (exactMatch) return exactMatch;
+
+    const numericMatch = rawValue.match(/\b(\d+)\b/);
+    if (numericMatch) {
+      const mappedName = classNameById.get(numericMatch[1]);
+      if (mappedName) return mappedName;
+    }
+
+    return rawValue;
+  };
 
   useEffect(() => {
     if (!search) {
@@ -250,7 +328,7 @@ const StudentsList: React.FC = () => {
                   <td className="px-4 py-3 text-muted-foreground">{(page - 1) * ITEMS_PER_PAGE + i + 1}</td>
                   <td className="px-4 py-3 font-medium text-foreground">{s.fullName}</td>
                   <td className="px-4 py-3 text-foreground">{s.fatherName}</td>
-                  <td className="px-4 py-3 text-foreground">{s.studentClass}</td>
+                  <td className="px-4 py-3 text-foreground">{getClassDisplayName(s.studentClass)}</td>
                   <td className="px-4 py-3">
                     {s.discount !== 'No Discount' ? (
                       <div>
@@ -307,7 +385,7 @@ const StudentsList: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-bold text-foreground">{viewStudent.fullName}</h2>
-                  <p className="text-sm text-muted-foreground">{viewStudent.fatherName} • {viewStudent.studentClass}</p>
+                  <p className="text-sm text-muted-foreground">{viewStudent.fatherName} • {getClassDisplayName(viewStudent.studentClass)}</p>
                 </div>
                 <button onClick={() => setViewStudent(null)} className="p-1 hover:bg-muted rounded-lg"><X size={20} /></button>
               </div>
@@ -343,7 +421,7 @@ const StudentsList: React.FC = () => {
               {viewTab === 'academic' && (
                 <div className="space-y-3">
                   {[
-                    ['Class', viewStudent.studentClass], ['Section', viewStudent.section || '—'],
+                    ['Class', getClassDisplayName(viewStudent.studentClass)], ['Section', viewStudent.section || '—'],
                     ['Roll Number', viewStudent.rollNumber?.toString() || '—'],
                     ['Admission Date', formatDate(viewStudent.admissionDate)],
                     ['Previous School', viewStudent.previousSchool || '—'],
