@@ -67,7 +67,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers['Authorization'] = `Bearer ${authToken}`;
         }
 
-        const response = await fetch(`${API_BASE_URL}/students`, { headers });
+        const response = await fetch(`${API_BASE_URL}/students?limit=200`, { headers });
         if (!response.ok) return;
 
         const data = await response.json();

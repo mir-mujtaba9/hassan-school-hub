@@ -115,6 +115,7 @@ const StudentsList: React.FC = () => {
 
         const params = new URLSearchParams();
         params.set('search', search);
+        params.set('limit', '200');
         const url = `${import.meta.env.VITE_API_URL}/students?${params.toString()}`;
 
         const headers: HeadersInit = {};
