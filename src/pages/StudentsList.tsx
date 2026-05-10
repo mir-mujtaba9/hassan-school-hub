@@ -170,11 +170,11 @@ const StudentsList: React.FC = () => {
 
   const filtered = useMemo(() => {
     return visibleStudents.filter(s => {
-      const matchSearch = !search || s.fullName.toLowerCase().includes(search.toLowerCase()) || s.fatherName.toLowerCase().includes(search.toLowerCase()) || s.studentClass.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = !search || s.fullName.toLowerCase().includes(search.toLowerCase()) || s.fatherName.toLowerCase().includes(search.toLowerCase()) || getClassDisplayName(s.studentClass).toLowerCase().includes(search.toLowerCase());
       const matchStatus = statusFilter === 'All' || s.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [visibleStudents, search, statusFilter]);
+  }, [visibleStudents, search, statusFilter, classNameById]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paged = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
