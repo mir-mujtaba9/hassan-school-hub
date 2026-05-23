@@ -42,8 +42,8 @@ const mapApiExpenseToUi = (item: any, fallbackId: string): Expense => ({
 
 const Expenses = () => {
   const { expenses, setExpenses, authToken } = useAppContext();
-  const [selectedMonth, setSelectedMonth] = useState('March');
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTHS[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -55,8 +55,8 @@ const Expenses = () => {
 
   // Filters
   const [filterCat, setFilterCat] = useState('All');
-  const [filterFrom, setFilterFrom] = useState('');
-  const [filterTo, setFilterTo] = useState('');
+  const [filterFrom, setFilterFrom] = useState(() => new Date().toISOString().split('T')[0]);
+  const [filterTo, setFilterTo] = useState(() => new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
 
   const emptyForm = { date: new Date().toISOString().split('T')[0], category: '', description: '', amount: '', paymentMethod: 'Cash', paidTo: '', receiptRef: '', recordedBy: 'Admin', notes: '' };

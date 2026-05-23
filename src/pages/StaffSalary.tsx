@@ -17,8 +17,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const StaffSalary = () => {
   const { staff, setStaff, staffRoles, salaryRecords, setSalaryRecords, authToken } = useAppContext();
-  const [selectedMonth, setSelectedMonth] = useState('March');
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTHS[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
   // Modals
   const [addOpen, setAddOpen] = useState(false);
@@ -37,7 +37,7 @@ const StaffSalary = () => {
   // Form state
   const emptyForm = { fullName: '', fatherName: '', role: '', gender: 'Male', monthlySalary: '', joinDate: new Date().toISOString().split('T')[0], phone: '', cnic: '', dateOfBirth: '', qualification: '', address: '', notes: '' };
   const [form, setForm] = useState(emptyForm);
-  const [payForm, setPayForm] = useState({ month: 'March', year: '2025', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'Cash', notes: '' });
+  const [payForm, setPayForm] = useState({ month: MONTHS[new Date().getMonth()], year: String(new Date().getFullYear()), amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'Cash', notes: '' });
   const [inactiveForm, setInactiveForm] = useState({ date: new Date().toISOString().split('T')[0], reason: '' });
 
   // Derived

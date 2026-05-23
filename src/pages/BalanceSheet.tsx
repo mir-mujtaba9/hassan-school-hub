@@ -57,8 +57,8 @@ const extractErrorMessage = async (response: Response, fallback: string) => {
 
 const BalanceSheet = () => {
   const { students, feeRecords, staff, salaryRecords, expenses, authToken } = useAppContext();
-  const [selectedMonth, setSelectedMonth] = useState('March');
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTHS[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
   const [report, setReport] = useState<BalanceSheetReport | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);

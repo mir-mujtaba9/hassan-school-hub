@@ -83,8 +83,8 @@ const FeeCollection: React.FC = () => {
   const activeStudents = students.filter(s => s.status === 'Active');
   const isTeacher = userRole === 'teacher';
 
-  const [selectedMonth, setSelectedMonth] = useState('March');
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTHS[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showFeeStructure, setShowFeeStructure] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState('');
@@ -92,8 +92,8 @@ const FeeCollection: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentNotes, setPaymentNotes] = useState('');
-  const [paymentMonth, setPaymentMonth] = useState('March');
-  const [paymentYear, setPaymentYear] = useState(2025);
+  const [paymentMonth, setPaymentMonth] = useState(() => MONTHS[new Date().getMonth()]);
+  const [paymentYear, setPaymentYear] = useState(() => new Date().getFullYear());
   const [paymentAdditionalCharges, setPaymentAdditionalCharges] = useState<number | string>(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState({ name: '', amount: 0, balance: 0, receipt: '' });
