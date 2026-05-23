@@ -129,6 +129,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               item.class?.title ??
               item.class?.label ??
               (item.class_id ? `Class ${item.class_id}` : ''),
+            class_id: item.class_id ? String(item.class_id) : undefined,
             section: item.section ?? '',
             rollNumber:
               typeof item.roll_number === 'number'

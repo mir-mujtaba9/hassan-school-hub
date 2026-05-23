@@ -19,6 +19,7 @@ export interface Student {
   tehsil: string;
   admissionDate: string;
   studentClass: string;
+  class_id?: string;
   section: string;
   rollNumber: number | null;
   previousSchool: string;

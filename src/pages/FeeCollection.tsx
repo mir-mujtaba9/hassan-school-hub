@@ -66,7 +66,7 @@ const extractFeeFromResponse = (data: any): any => {
 };
 
 const FEE_STRUCTURE_SUMMARY = [
-   { cls: 'KG', students: 0, stdFee: 1300, avgFee: 1300 },
+  { cls: 'KG', students: 0, stdFee: 1300, avgFee: 1300 },
   { cls: 'Nursery', students: 0, stdFee: 1400, avgFee: 1400 },
   { cls: 'Prep', students: 0, stdFee: 1400, avgFee: 1400 },
   { cls: 'Class 1-2', students: 0, stdFee: 1500, avgFee: 1500 },
@@ -133,10 +133,10 @@ const FeeCollection: React.FC = () => {
         const list = Array.isArray(data)
           ? data
           : Array.isArray((data as any)?.classes)
-          ? (data as any).classes
-          : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : [];
+            ? (data as any).classes
+            : Array.isArray((data as any)?.data)
+              ? (data as any).data
+              : [];
 
         const mapped: ClassOption[] = (Array.isArray(list) ? list : [])
           .map((item: any) => {
@@ -194,10 +194,10 @@ const FeeCollection: React.FC = () => {
         const list = Array.isArray(data)
           ? data
           : Array.isArray((data as any)?.fees)
-          ? (data as any).fees
-          : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : [];
+            ? (data as any).fees
+            : Array.isArray((data as any)?.data)
+              ? (data as any).data
+              : [];
 
         const mapped: FeeRecord[] = (Array.isArray(list) ? list : [])
           .map((item: any) => normalizeFeeRecord(item, selectedMonth, selectedYear))
@@ -242,17 +242,6 @@ const FeeCollection: React.FC = () => {
 
         if (classFilterId) {
           params.set('class_id', classFilterId);
-          const className = classNameById.get(classFilterId);
-          if (className) {
-            const m = className.match(/Class\s*(\d+)/i);
-            if (m && m[1]) {
-              // send numeric class when the name is like 'Class 2' (common API expectation)
-              params.set('class', m[1]);
-            } else {
-              // otherwise send class_name
-              params.set('class_name', className);
-            }
-          }
         }
 
         const qs = params.toString();
@@ -276,10 +265,10 @@ const FeeCollection: React.FC = () => {
         const list = Array.isArray(data)
           ? data
           : Array.isArray((data as any)?.students)
-          ? (data as any).students
-          : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : [];
+            ? (data as any).students
+            : Array.isArray((data as any)?.data)
+              ? (data as any).data
+              : [];
 
         if (!Array.isArray(list)) {
           setStudentFilterIds(null);
@@ -318,7 +307,7 @@ const FeeCollection: React.FC = () => {
         if (!student.fullName.toLowerCase().includes(q) && !student.fatherName.toLowerCase().includes(q)) return false;
       }
       // Class filter (best-effort local match; the server-filtered ID set is the source of truth)
-      if (selectedClassName && student.studentClass && student.studentClass !== selectedClassName) return false;
+      if (classFilterId && String(student.class_id) !== String(classFilterId)) return false;
       // Status filter
       if (statusFilter !== 'All Status' && r.status !== statusFilter) return false;
       return true;
@@ -356,21 +345,21 @@ const FeeCollection: React.FC = () => {
   const totalDue = existingRecord
     ? existingRecord.totalDue
     : selectedStudent
-    ? selectedStudent.discountedFee + (existingRecord?.prevBalance || 0) + computedAdditional
-    : 0;
+      ? selectedStudent.discountedFee + (existingRecord?.prevBalance || 0) + computedAdditional
+      : 0;
   const alreadyPaid = existingRecord ? existingRecord.paidAmount || 0 : 0;
   const balanceAfter = totalDue - (alreadyPaid + payingNow);
 
   const filteredPaymentStudents = useMemo(() => {
     return activeStudents.filter(s => {
-      if (paymentClassName && s.studentClass !== paymentClassName) return false;
+      if (paymentClassId && String(s.class_id) !== String(paymentClassId)) return false;
       if (paymentSearchQuery) {
         const q = paymentSearchQuery.toLowerCase();
         if (!s.fullName.toLowerCase().includes(q) && !s.fatherName.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [activeStudents, paymentClassName, paymentSearchQuery]);
+  }, [activeStudents, paymentClassId, paymentSearchQuery]);
 
   const openPayment = (studentId?: string, balance?: boolean) => {
     setPaymentStudentId(studentId || '');
@@ -531,7 +520,7 @@ const FeeCollection: React.FC = () => {
       const due = student.discountedFee + prevBal + (Number(paymentAdditionalCharges) || 0);
       const bal = due - payingNow;
       const status: FeeRecord['status'] = bal <= 0 ? (payingNow > due ? 'Advance' : 'Paid') : payingNow > 0 ? 'Partial' : 'Unpaid';
-      
+
       if (existingRecord && isBalancePayment) {
         const newPaid = existingRecord.paidAmount + payingNow;
         const newBalance = existingRecord.totalDue - newPaid;
@@ -806,20 +795,20 @@ const FeeCollection: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-foreground">Filter by Class</label>
-                  <select
-                    value={paymentClassId}
-                    onChange={e => {
-                      setPaymentClassId(e.target.value);
-                      setPaymentStudentId('');
-                    }}
-                    className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1"
-                  >
-                    <option value="">All Classes</option>
-                    {classes.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                <select
+                  value={paymentClassId}
+                  onChange={e => {
+                    setPaymentClassId(e.target.value);
+                    setPaymentStudentId('');
+                  }}
+                  className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1"
+                >
+                  <option value="">All Classes</option>
+                  {classes.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
