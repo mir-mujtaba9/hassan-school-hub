@@ -243,7 +243,16 @@ const FeeCollection: React.FC = () => {
         if (classFilterId) {
           params.set('class_id', classFilterId);
           const className = classNameById.get(classFilterId);
-          if (className) params.set('class_name', className);
+          if (className) {
+            const m = className.match(/Class\s*(\d+)/i);
+            if (m && m[1]) {
+              // send numeric class when the name is like 'Class 2' (common API expectation)
+              params.set('class', m[1]);
+            } else {
+              // otherwise send class_name
+              params.set('class_name', className);
+            }
+          }
         }
 
         const qs = params.toString();
