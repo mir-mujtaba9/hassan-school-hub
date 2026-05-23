@@ -474,6 +474,13 @@ const StudentsList: React.FC = () => {
                         </div>
                         <p className="text-muted-foreground mt-1">Paid: {formatRs(r.paidAmount)} / {formatRs(r.totalDue)}</p>
                         {r.receiptNumber && <p className="text-muted-foreground text-xs">{r.receiptNumber} • {formatDate(r.paymentDate || '')}</p>}
+                        {r.additionalCharges !== 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {r.additionalCharges > 0
+                              ? `+${formatRs(r.additionalCharges)} additional charges`
+                              : `${formatRs(r.additionalCharges)} deduction`}
+                          </p>
+                        )}
                       </div>
                     ))
                   )}

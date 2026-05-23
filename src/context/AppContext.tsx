@@ -371,7 +371,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const year = Number(item.year ?? 2025);
           const monthlyFee = Number(item.monthly_fee ?? item.monthlyFee ?? 0);
           const prevBalance = Number(item.prev_balance ?? item.prevBalance ?? 0);
-          const totalDue = Number(item.total_due ?? item.totalDue ?? monthlyFee + prevBalance);
+          const additionalCharges = Number(item.additional_charges ?? item.additionalCharges ?? 0) || 0;
+          const totalDue = Number(item.total_due ?? item.totalDue ?? monthlyFee + prevBalance + additionalCharges);
           const paidAmount = Number(item.paid_amount ?? item.paidAmount ?? 0);
           const balanceRemaining = Number(item.balance_remaining ?? item.balanceRemaining ?? Math.max(0, totalDue - paidAmount));
           const status = (item.status ?? 'Unpaid') as FeeRecord['status'];
@@ -382,6 +383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             month: monthName,
             year,
             monthlyFee,
+            additionalCharges,
             prevBalance,
             totalDue,
             paidAmount,

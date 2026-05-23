@@ -46,6 +46,7 @@ export interface FeeRecord {
   monthlyFee: number;
   prevBalance: number;
   totalDue: number;
+  additionalCharges: number;
   paidAmount: number;
   balanceRemaining: number;
   status: 'Paid' | 'Partial' | 'Unpaid' | 'Advance';
@@ -121,16 +122,16 @@ export const initialStudents: Student[] = [
 ];
 
 export const initialFeeRecords: FeeRecord[] = [
-  { id: 'f1', studentId: '1', month: 'March', year: 2025, monthlyFee: 1500, prevBalance: 0, totalDue: 1500, paidAmount: 1500, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-05', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-001' },
-  { id: 'f2', studentId: '2', month: 'March', year: 2025, monthlyFee: 1350, prevBalance: 0, totalDue: 1350, paidAmount: 800, balanceRemaining: 550, status: 'Partial', paymentDate: '2025-03-10', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-002' },
-  { id: 'f3', studentId: '3', month: 'March', year: 2025, monthlyFee: 1200, prevBalance: 400, totalDue: 1600, paidAmount: 1600, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-08', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-003' },
-  { id: 'f4', studentId: '4', month: 'March', year: 2025, monthlyFee: 1000, prevBalance: 0, totalDue: 1000, paidAmount: 0, balanceRemaining: 1000, status: 'Unpaid' },
-  { id: 'f5', studentId: '5', month: 'March', year: 2025, monthlyFee: 1500, prevBalance: 0, totalDue: 1500, paidAmount: 1000, balanceRemaining: 500, status: 'Partial', paymentDate: '2025-03-12', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-004' },
-  { id: 'f6', studentId: '6', month: 'March', year: 2025, monthlyFee: 1200, prevBalance: 200, totalDue: 1400, paidAmount: 1400, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-03', paymentMethod: 'Bank Transfer', receiptNumber: 'RCP-2025-005' },
-  { id: 'f7', studentId: '7', month: 'March', year: 2025, monthlyFee: 1350, prevBalance: 0, totalDue: 1350, paidAmount: 0, balanceRemaining: 1350, status: 'Unpaid' },
-  { id: 'f8', studentId: '8', month: 'March', year: 2025, monthlyFee: 1200, prevBalance: 0, totalDue: 1200, paidAmount: 1500, balanceRemaining: 0, status: 'Advance', paymentDate: '2025-03-01', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-006', notes: 'Paid in advance for next month' },
-  { id: 'f9', studentId: '9', month: 'March', year: 2025, monthlyFee: 375, prevBalance: 500, totalDue: 875, paidAmount: 500, balanceRemaining: 375, status: 'Partial', paymentDate: '2025-03-15', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-007' },
-  { id: 'f10', studentId: '10', month: 'March', year: 2025, monthlyFee: 2000, prevBalance: 0, totalDue: 2000, paidAmount: 2000, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-02', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-008' },
+  { id: 'f1', studentId: '1', month: 'March', year: 2025, monthlyFee: 1500, prevBalance: 0, additionalCharges: 0, totalDue: 1500, paidAmount: 1500, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-05', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-001' },
+  { id: 'f2', studentId: '2', month: 'March', year: 2025, monthlyFee: 1350, prevBalance: 0, additionalCharges: 0, totalDue: 1350, paidAmount: 800, balanceRemaining: 550, status: 'Partial', paymentDate: '2025-03-10', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-002' },
+  { id: 'f3', studentId: '3', month: 'March', year: 2025, monthlyFee: 1200, prevBalance: 400, additionalCharges: 0, totalDue: 1600, paidAmount: 1600, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-08', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-003' },
+  { id: 'f4', studentId: '4', month: 'March', year: 2025, monthlyFee: 1000, prevBalance: 0, additionalCharges: 0, totalDue: 1000, paidAmount: 0, balanceRemaining: 1000, status: 'Unpaid' },
+  { id: 'f5', studentId: '5', month: 'March', year: 2025, monthlyFee: 1500, prevBalance: 0, additionalCharges: 0, totalDue: 1500, paidAmount: 1000, balanceRemaining: 500, status: 'Partial', paymentDate: '2025-03-12', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-004' },
+  { id: 'f6', studentId: '6', month: 'March', year: 2025, monthlyFee: 1200, prevBalance: 200, additionalCharges: 0, totalDue: 1400, paidAmount: 1400, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-03', paymentMethod: 'Bank Transfer', receiptNumber: 'RCP-2025-005' },
+  { id: 'f7', studentId: '7', month: 'March', year: 2025, monthlyFee: 1350, prevBalance: 0, additionalCharges: 0, totalDue: 1350, paidAmount: 0, balanceRemaining: 1350, status: 'Unpaid' },
+  { id: 'f8', studentId: '8', month: 'March', year: 2025, monthlyFee: 1200, prevBalance: 0, additionalCharges: 0, totalDue: 1200, paidAmount: 1500, balanceRemaining: 0, status: 'Advance', paymentDate: '2025-03-01', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-006', notes: 'Paid in advance for next month' },
+  { id: 'f9', studentId: '9', month: 'March', year: 2025, monthlyFee: 375, prevBalance: 500, additionalCharges: 0, totalDue: 875, paidAmount: 500, balanceRemaining: 375, status: 'Partial', paymentDate: '2025-03-15', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-007' },
+  { id: 'f10', studentId: '10', month: 'March', year: 2025, monthlyFee: 2000, prevBalance: 0, additionalCharges: 0, totalDue: 2000, paidAmount: 2000, balanceRemaining: 0, status: 'Paid', paymentDate: '2025-03-02', paymentMethod: 'Cash', receiptNumber: 'RCP-2025-008' },
 ];
 
 receiptCounter = 9;

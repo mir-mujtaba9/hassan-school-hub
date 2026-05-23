@@ -36,8 +36,9 @@ const normalizeFeeRecord = (item: any, fallbackMonth: string, fallbackYear: numb
   const monthlyFee = Number(item?.monthly_fee ?? item?.monthlyFee ?? 0);
   const paidAmount = Number(item?.paid_amount ?? item?.paidAmount ?? 0);
   const prevBalance = Number(item?.prev_balance ?? item?.prevBalance ?? 0);
-  const totalDue = Number(item?.total_due ?? item?.totalDue ?? monthlyFee + prevBalance);
-  const balanceRemaining = Number(item?.balance_remaining ?? item?.balanceRemaining ?? Math.max(0, totalDue - paidAmount));
+  const additionalCharges = Number(item?.additional_charges ?? item?.additionalCharges ?? 0) || 0;
+  const totalDueWithCharges = Number(item?.total_due ?? item?.totalDue ?? monthlyFee + prevBalance + additionalCharges);
+  const balanceRemaining = Number(item?.balance_remaining ?? item?.balanceRemaining ?? Math.max(0, totalDueWithCharges - paidAmount));
   const status = (item?.status ?? 'Unpaid') as FeeRecord['status'];
 
   return {
@@ -46,8 +47,9 @@ const normalizeFeeRecord = (item: any, fallbackMonth: string, fallbackYear: numb
     month: monthName,
     year,
     monthlyFee,
+    additionalCharges,
     prevBalance,
-    totalDue,
+    totalDue: totalDueWithCharges,
     paidAmount,
     balanceRemaining,
     status,
@@ -92,6 +94,7 @@ const FeeCollection: React.FC = () => {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [paymentMonth, setPaymentMonth] = useState('March');
   const [paymentYear, setPaymentYear] = useState(2025);
+  const [paymentAdditionalCharges, setPaymentAdditionalCharges] = useState<number | string>(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState({ name: '', amount: 0, balance: 0, receipt: '' });
   const [isBalancePayment, setIsBalancePayment] = useState(false);
@@ -360,11 +363,13 @@ const FeeCollection: React.FC = () => {
     setIsBalancePayment(!!balance);
     setPaymentClassId('');
     setPaymentSearchQuery('');
+    setPaymentAdditionalCharges(0);
     setShowPaymentModal(true);
 
     if (balance && studentId) {
       const rec = feeRecords.find(r => r.studentId === studentId && r.month === selectedMonth && r.year === selectedYear);
       if (rec) setPaymentAmount(String(rec.balanceRemaining));
+      if (rec) setPaymentAdditionalCharges(rec.additionalCharges ?? 0);
     }
   };
 
@@ -387,6 +392,7 @@ const FeeCollection: React.FC = () => {
           paymentDate: paymentDate,
           paymentMethod: paymentMethod,
           notes: paymentNotes || existingRecord.notes,
+          additionalCharges: Number(paymentAdditionalCharges) || 0,
         };
 
         const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -410,19 +416,20 @@ const FeeCollection: React.FC = () => {
             paymentMethod: paymentMethod,
             receiptNumber: existingRecord.receiptNumber ?? receiptNum,
             notes: paymentNotes || existingRecord.notes,
+            additionalCharges: existingRecord.additionalCharges ?? 0,
           };
           setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? convertedRecord : r));
           setLastReceipt({ name: student.fullName, amount: payingNow, balance: convertedRecord.balanceRemaining, receipt: convertedRecord.receiptNumber || receiptNum });
         } else {
           setFeeRecords(prev => prev.map(r => r.id === existingRecord.id ? {
             ...r, paidAmount: newPaid, balanceRemaining: Math.max(0, newBalance), status: newStatus,
-            paymentDate: paymentDate, paymentMethod: paymentMethod, receiptNumber: receiptNum, notes: paymentNotes || r.notes,
+            paymentDate: paymentDate, paymentMethod: paymentMethod, receiptNumber: receiptNum, notes: paymentNotes || r.notes, additionalCharges: r.additionalCharges ?? 0,
           } : r));
           setLastReceipt({ name: student.fullName, amount: payingNow, balance: Math.max(0, newBalance), receipt: receiptNum });
         }
       } else {
         const prevBal = existingRecord?.prevBalance || 0;
-        const due = student.discountedFee + prevBal;
+        const due = student.discountedFee + prevBal + (Number(paymentAdditionalCharges) || 0);
         const bal = due - payingNow;
         const status: FeeRecord['status'] = bal <= 0 ? (payingNow > due ? 'Advance' : 'Paid') : payingNow > 0 ? 'Partial' : 'Unpaid';
 
@@ -434,6 +441,7 @@ const FeeCollection: React.FC = () => {
           paymentDate: paymentDate,
           paymentMethod: paymentMethod,
           notes: paymentNotes,
+          additionalCharges: Number(paymentAdditionalCharges) || 0,
         };
 
         const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -462,6 +470,7 @@ const FeeCollection: React.FC = () => {
               year: paymentYear,
               monthlyFee: student.discountedFee,
               prevBalance: prevBal,
+              additionalCharges: Number(paymentAdditionalCharges) || 0,
               totalDue: due,
               paidAmount: payingNow,
               balanceRemaining: Math.max(0, bal),
@@ -482,6 +491,7 @@ const FeeCollection: React.FC = () => {
             year: paymentYear,
             monthlyFee: student.discountedFee,
             prevBalance: prevBal,
+            additionalCharges: Number(paymentAdditionalCharges) || 0,
             totalDue: due,
             paidAmount: payingNow,
             balanceRemaining: Math.max(0, bal),
@@ -498,7 +508,7 @@ const FeeCollection: React.FC = () => {
     } catch (err) {
       console.error('Error saving payment:', err);
       const prevBal = existingRecord?.prevBalance || 0;
-      const due = student.discountedFee + prevBal;
+      const due = student.discountedFee + prevBal + (Number(paymentAdditionalCharges) || 0);
       const bal = due - payingNow;
       const status: FeeRecord['status'] = bal <= 0 ? (payingNow > due ? 'Advance' : 'Paid') : payingNow > 0 ? 'Partial' : 'Unpaid';
       
@@ -516,6 +526,7 @@ const FeeCollection: React.FC = () => {
           ...existingRecord,
           monthlyFee: student.discountedFee,
           prevBalance: prevBal,
+          additionalCharges: existingRecord.additionalCharges ?? 0,
           totalDue: due,
           paidAmount: payingNow,
           balanceRemaining: Math.max(0, bal),
@@ -535,6 +546,7 @@ const FeeCollection: React.FC = () => {
           year: paymentYear,
           monthlyFee: student.discountedFee,
           prevBalance: prevBal,
+          additionalCharges: Number(paymentAdditionalCharges) || 0,
           totalDue: due,
           paidAmount: payingNow,
           balanceRemaining: Math.max(0, bal),
@@ -829,6 +841,17 @@ const FeeCollection: React.FC = () => {
                   <p className="font-medium text-foreground">Total Due: {formatRs(totalDue)}</p>
                 </div>
               )}
+
+              <div>
+                <label className="text-sm font-medium text-foreground">Additional Charges (Rs.)</label>
+                <input
+                  type="number"
+                  value={paymentAdditionalCharges as any}
+                  onChange={e => setPaymentAdditionalCharges(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1"
+                  placeholder="0"
+                />
+              </div>
 
               <div>
                 <label className="text-sm font-medium text-foreground">Amount Receiving (Rs.)</label>
