@@ -240,7 +240,11 @@ const FeeCollection: React.FC = () => {
         const params = new URLSearchParams();
         if (searchQuery) params.set('search', searchQuery);
 
-        if (classFilterId) params.set('class_id', classFilterId);
+        if (classFilterId) {
+          params.set('class_id', classFilterId);
+          const className = classNameById.get(classFilterId);
+          if (className) params.set('class_name', className);
+        }
 
         const qs = params.toString();
         if (!qs) {
@@ -337,9 +341,16 @@ const FeeCollection: React.FC = () => {
 
   const selectedStudent = students.find(s => s.id === paymentStudentId);
   const existingRecord = feeRecords.find(r => r.studentId === paymentStudentId && r.month === paymentMonth && r.year === paymentYear);
-  const totalDue = selectedStudent ? (selectedStudent.discountedFee + (existingRecord?.prevBalance || 0) - (isBalancePayment ? (existingRecord?.paidAmount || 0) : 0)) : 0;
   const payingNow = parseInt(paymentAmount) || 0;
-  const balanceAfter = totalDue - payingNow;
+  // Determine total due: prefer server-provided record, otherwise compute from student data + prevBalance + entered additional charges
+  const computedAdditional = Number(paymentAdditionalCharges) || 0;
+  const totalDue = existingRecord
+    ? existingRecord.totalDue
+    : selectedStudent
+    ? selectedStudent.discountedFee + (existingRecord?.prevBalance || 0) + computedAdditional
+    : 0;
+  const alreadyPaid = existingRecord ? existingRecord.paidAmount || 0 : 0;
+  const balanceAfter = totalDue - (alreadyPaid + payingNow);
 
   const filteredPaymentStudents = useMemo(() => {
     return activeStudents.filter(s => {
