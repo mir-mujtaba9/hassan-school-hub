@@ -66,16 +66,16 @@ const extractFeeFromResponse = (data: any): any => {
 };
 
 const FEE_STRUCTURE_SUMMARY = [
-  { cls: 'KG', students: 0, stdFee: 1300, avgFee: 1300 },
-  { cls: 'Nursery', students: 0, stdFee: 1400, avgFee: 1400 },
-  { cls: 'Prep', students: 0, stdFee: 1400, avgFee: 1400 },
-  { cls: 'Class 1-2', students: 0, stdFee: 1500, avgFee: 1500 },
-  { cls: 'Class 3-4', students: 0, stdFee: 1600, avgFee: 1600 },
-  { cls: 'Class 5-6', students: 0, stdFee: 1700, avgFee: 1700 },
-  { cls: 'Class 7', students: 0, stdFee: 1800, avgFee: 1800 },
-  { cls: 'Class 8', students: 0, stdFee: 2000, avgFee: 2000 },
-  { cls: 'Class 9', students: 0, stdFee: 2500, avgFee: 2500 },
-  { cls: 'Class 10', students: 0, stdFee: 2700, avgFee: 2700 },
+  { cls: 'PG',        students: 0, stdFee: 1300, avgFee: 1300 },
+  { cls: 'Nursery',   students: 0, stdFee: 1400, avgFee: 1400 },
+  { cls: 'Prep',      students: 0, stdFee: 1500, avgFee: 1500 },
+  { cls: 'Class 1-2', students: 0, stdFee: 1600, avgFee: 1600 },
+  { cls: 'Class 3-4', students: 0, stdFee: 1700, avgFee: 1700 },
+  { cls: 'Class 5-6', students: 0, stdFee: 1800, avgFee: 1800 },
+  { cls: 'Class 7',   students: 0, stdFee: 1900, avgFee: 1900 },
+  { cls: 'Class 8',   students: 0, stdFee: 2000, avgFee: 2000 },
+  { cls: 'Class 9',   students: 0, stdFee: 2500, avgFee: 2500 },
+  { cls: 'Class 10',  students: 0, stdFee: 2800, avgFee: 2800 },
 ];
 
 const FeeCollection: React.FC = () => {
