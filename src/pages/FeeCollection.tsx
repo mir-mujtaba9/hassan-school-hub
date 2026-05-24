@@ -717,7 +717,7 @@ const FeeCollection: React.FC = () => {
                     <td className="px-3 py-3 text-muted-foreground">{i + 1}</td>
                     <td className="px-3 py-3">
                       <span className="font-medium text-foreground">{student.fullName}</span>
-                      <br /><span className="text-xs text-muted-foreground">{student.studentClass}</span>
+                      <br /><span className="text-xs text-muted-foreground">{classes.find(c => String(c.id) === String(student.class_id))?.name || student.studentClass}</span>
                     </td>
                     <td className="px-3 py-3 text-foreground">{student.fatherName}</td>
                     <td className="px-3 py-3 font-medium text-primary">{formatRs(r.monthlyFee)}</td>
@@ -822,7 +822,7 @@ const FeeCollection: React.FC = () => {
                 <label className="text-sm font-medium text-foreground">Student <span className="text-muted-foreground font-normal">({filteredPaymentStudents.length} found)</span></label>
                 <select value={paymentStudentId} onChange={e => setPaymentStudentId(e.target.value)} className="w-full px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none mt-1">
                   <option value="">Select Student</option>
-                  {filteredPaymentStudents.map(s => <option key={s.id} value={s.id}>{s.fullName} — {s.studentClass}</option>)}
+                  {filteredPaymentStudents.map(s => <option key={s.id} value={s.id}>{s.fullName} — {classes.find(c => String(c.id) === String(s.class_id))?.name || s.studentClass}</option>)}
                 </select>
               </div>
 
@@ -843,7 +843,7 @@ const FeeCollection: React.FC = () => {
 
               {selectedStudent && (
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm space-y-1">
-                  <p className="font-semibold text-foreground">{selectedStudent.fullName} — {selectedStudent.studentClass}</p>
+                  <p className="font-semibold text-foreground">{selectedStudent.fullName} — {classes.find(c => String(c.id) === String(selectedStudent.class_id))?.name || selectedStudent.studentClass}</p>
                   <p className="text-muted-foreground">Father: {selectedStudent.fatherName}</p>
                   <p className="text-muted-foreground">Monthly Fee: <span className="text-primary font-medium">{formatRs(selectedStudent.discountedFee)}</span></p>
                   <p className="text-muted-foreground">Previous Balance: <span className={existingRecord?.prevBalance ? 'text-warning font-medium' : ''}>{formatRs(existingRecord?.prevBalance || 0)}</span></p>
