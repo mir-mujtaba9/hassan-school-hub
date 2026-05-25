@@ -25,7 +25,7 @@ const FEE_STRUCTURE = [
   { label: 'PG', fee: 1300 }, { label: 'Nursery', fee: 1400 }, { label: 'Prep', fee: 1500 },
   { label: 'Class 1 - 2', fee: 1600 }, { label: 'Class 3 - 4', fee: 1700 },
   { label: 'Class 5 - 6', fee: 1800 }, { label: 'Class 7', fee: 1900 }, { label: 'Class 8', fee: 2000 },
-  { label: 'Class 9', fee: 2500 }, { label: 'Class 10', fee: 2700 },
+  { label: 'Class 9', fee: 2500 }, { label: 'Class 10', fee: 2800 },
 ];
 
 const StudentAdmission: React.FC = () => {
