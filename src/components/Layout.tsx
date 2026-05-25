@@ -30,13 +30,46 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { setIsLoggedIn, setAuthToken, setUserId, setUserEmail, userRole, userName, authToken } = useAppContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const isAdmin = userRole === 'admin';
+  const isAccountant = userRole === 'accountant';
+  const isTeacher = userRole === 'teacher';
+
+  // Visible to admin + accountant (teachers get a limited view)
+  const canAccessTeacherView = isTeacher;
+  const canAccessStudents = isAdmin || isAccountant || canAccessTeacherView;
+  const canAccessFees = isAdmin || isAccountant || canAccessTeacherView;
+  const canAccessExpenses = isAdmin || isAccountant;
+  const canAccessAdmission = isAdmin || isAccountant;
+
+  // Admin only
+  const canAccessStaff = isAdmin;
+  const canAccessSalary = isAdmin;
+  const canAccessReports = isAdmin;
+  const canAccessUsers = isAdmin;
+
   const currentPath = location.pathname;
   let pageTitle = pageTitles[currentPath] || 'Dashboard';
   if (currentPath.startsWith('/edit/')) pageTitle = 'Edit Student';
 
   const menuItems = allMenuItems.filter(item => {
-    if (userRole === 'admin') return true;
-    return !item.adminOnly;
+    switch (item.path) {
+      case '/admission':
+        return canAccessAdmission;
+      case '/students':
+        return canAccessStudents;
+      case '/fees':
+        return canAccessFees;
+      case '/expenses':
+        return canAccessExpenses;
+      case '/staff':
+        return canAccessStaff || canAccessSalary;
+      case '/balance':
+        return canAccessReports;
+      case '/users':
+        return canAccessUsers;
+      default:
+        return isAdmin;
+    }
   });
 
   const handleLogout = async () => {

@@ -806,7 +806,7 @@ const StudentAdmission: React.FC = () => {
         <div className="lg:w-72 shrink-0">
           <div className="bg-card rounded-xl shadow-sm border border-border sticky top-4">
             <div className="bg-primary text-primary-foreground px-4 py-3 rounded-t-xl">
-              <h3 className="font-semibold text-sm">Fee Structure — 2025</h3>
+              <h3 className="font-semibold text-sm">Fee Structure — 2026</h3>
             </div>
             <div className="p-4">
               <table className="w-full text-sm">

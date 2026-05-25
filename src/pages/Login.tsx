@@ -72,7 +72,10 @@ const Login: React.FC = () => {
 
         const user = data?.user ?? data?.data?.user ?? null;
         setIsLoggedIn(true);
-        setUserRole('teacher');
+        const roleFromResponse = String(
+          user?.role ?? user?.userRole ?? data?.role ?? data?.userRole ?? ''
+        ).toLowerCase();
+        setUserRole(roleFromResponse === 'accountant' ? 'accountant' : 'teacher');
         setUserName(user?.full_name || user?.fullName || user?.name || email);
         setUserEmail(String(user?.email ?? email));
         setUserId(user?.id ? String(user.id) : user?._id ? String(user._id) : null);

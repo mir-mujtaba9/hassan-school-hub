@@ -15,6 +15,8 @@ type ClassOption = {
 const StudentsList: React.FC = () => {
   const { students, setStudents, feeRecords, userRole, authToken } = useAppContext();
   const navigate = useNavigate();
+  const isAdmin = userRole === 'admin';
+  const isAccountant = userRole === 'accountant';
   const isTeacher = userRole === 'teacher';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -259,7 +261,7 @@ const StudentsList: React.FC = () => {
             <option>Active</option>
             <option>Left</option>
           </select>
-          {!isTeacher && (
+          {(isAdmin || isAccountant) && (
             <button onClick={() => navigate('/admission')} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors whitespace-nowrap">
               <Plus size={16} /> New Admission
             </button>
@@ -353,10 +355,12 @@ const StudentsList: React.FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => { setViewStudent(s); setViewTab('personal'); }} className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="View"><Eye size={16} /></button>
-                      {!isTeacher && (
+                      {(isAdmin || isAccountant) && (
                         <>
                           <button onClick={() => navigate(`/edit/${s.id}`)} className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Edit"><Pencil size={16} /></button>
-                          <button onClick={() => setDeleteTarget(s)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Delete"><Trash2 size={16} /></button>
+                          {isAdmin && (
+                            <button onClick={() => setDeleteTarget(s)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Delete"><Trash2 size={16} /></button>
+                          )}
                         </>
                       )}
                     </div>
