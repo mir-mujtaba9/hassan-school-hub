@@ -13,7 +13,7 @@ import { useAppContext } from '@/context/AppContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-type UserRole = 'admin' | 'teacher';
+type UserRole = 'admin' | 'teacher' | 'accountant';
 
 type UserStatus = 'Active' | 'Inactive';
   
@@ -30,8 +30,9 @@ type ManagedUser = {
   assignedClasses?: string[];
 };
 
-const ROLE_OPTIONS: Array<{ label: string; value: 'Admin' | 'Teacher' }> = [
+const ROLE_OPTIONS: Array<{ label: string; value: 'Admin' | 'Teacher' | 'Accountant' }> = [
   { label: 'Admin', value: 'Admin' },
+  { label: 'Accountant', value: 'Accountant' },
   { label: 'Teacher', value: 'Teacher' },
 ];
 
@@ -39,7 +40,9 @@ const STATUS_OPTIONS: UserStatus[] = ['Active', 'Inactive'];
 
 const normalizeRole = (role: unknown): UserRole => {
   const raw = String(role ?? '').toLowerCase();
-  return raw === 'teacher' ? 'teacher' : 'admin';
+  if (raw === 'teacher') return 'teacher';
+  if (raw === 'accountant') return 'accountant';
+  return 'admin';
 };
 
 const parseAssignedClasses = (value: string): string[] => {
@@ -113,7 +116,7 @@ const UserManagement: React.FC = () => {
   const emptyForm = {
     fullName: '',
     email: '',
-    role: 'Teacher' as 'Admin' | 'Teacher',
+    role: 'Teacher' as 'Admin' | 'Teacher' | 'Accountant',
     password: '',
     phone: '',
     assignedClasses: '',
@@ -194,7 +197,7 @@ const UserManagement: React.FC = () => {
     setForm({
       fullName: u.fullName,
       email: u.email,
-      role: u.role === 'admin' ? 'Admin' : 'Teacher',
+      role: u.role === 'admin' ? 'Admin' : u.role === 'accountant' ? 'Accountant' : 'Teacher',
       password: '',
       phone: u.phone ?? '',
       assignedClasses: (u.assignedClasses ?? []).join(', '),
@@ -361,7 +364,11 @@ const UserManagement: React.FC = () => {
   };
 
   const roleBadge = (role: UserRole) =>
-    role === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-info text-info-foreground';
+    role === 'admin'
+      ? 'bg-primary text-primary-foreground'
+      : role === 'accountant'
+      ? 'bg-teal text-teal-foreground'
+      : 'bg-info text-info-foreground';
 
   const statusBadge = (status: UserStatus) =>
     status === 'Active' ? 'bg-success text-success-foreground' : 'bg-destructive text-destructive-foreground';
@@ -490,6 +497,7 @@ const UserManagement: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="All">All</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="accountant">Accountant</SelectItem>
                   <SelectItem value="teacher">Teacher</SelectItem>
                 </SelectContent>
               </Select>
@@ -602,7 +610,7 @@ const UserManagement: React.FC = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
-            <DialogDescription>Create a new admin/teacher account.</DialogDescription>
+            <DialogDescription>Create a new admin/accountant/teacher account.</DialogDescription>
           </DialogHeader>
           {formFields}
           <DialogFooter>
