@@ -271,10 +271,12 @@ const UserManagement: React.FC = () => {
 
     const assignedClasses = parseAssignedClasses(form.assignedClasses);
 
+    const roleValue = String(form.role).toLowerCase() as UserRole;
+
     const payload: Record<string, unknown> = {
       fullName: form.fullName.trim(),
       email: form.email.trim(),
-      role: form.role,
+      role: roleValue,
       status: form.status,
     };
 
@@ -282,7 +284,7 @@ const UserManagement: React.FC = () => {
     if (form.phone) payload.phone = form.phone;
     if (form.notes) payload.notes = form.notes;
 
-    if (form.role === 'Teacher') {
+    if (roleValue === 'teacher') {
       if (assignedClasses.length > 0) payload.assignedClasses = assignedClasses;
     } else {
       payload.assignedClasses = [];
