@@ -686,7 +686,7 @@ const FeeCollection: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
-                {['#', 'Student', 'Father', 'Monthly Fee', 'Prev Balance', 'Total Due', 'Paid', 'Balance', 'Status', 'Action'].map(h => (
+                {['#', 'Student', 'Father', 'Monthly Fee', 'Prev Balance', 'Additional Charges', 'Total Due', 'Paid', 'Balance', 'Status', 'Action'].map(h => (
                   <th key={h} className="text-left px-3 py-3 font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -694,7 +694,7 @@ const FeeCollection: React.FC = () => {
             <tbody>
               {currentRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-12 text-center">
+                  <td colSpan={11} className="px-3 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
                         <Search size={24} className="text-muted-foreground" />
@@ -722,6 +722,7 @@ const FeeCollection: React.FC = () => {
                     <td className="px-3 py-3 text-foreground">{student.fatherName}</td>
                     <td className="px-3 py-3 font-medium text-primary">{formatRs(r.monthlyFee)}</td>
                     <td className="px-3 py-3"><span className={r.prevBalance > 0 ? 'text-warning font-medium' : 'text-muted-foreground'}>{formatRs(r.prevBalance)}</span></td>
+                    <td className="px-3 py-3"><span className={r.additionalCharges > 0 ? 'text-warning font-medium' : 'text-muted-foreground'}>{formatRs(r.additionalCharges)}</span></td>
                     <td className="px-3 py-3 font-medium text-foreground">{formatRs(r.totalDue)}</td>
                     <td className="px-3 py-3 text-foreground">{formatRs(r.paidAmount)}</td>
                     <td className="px-3 py-3">
