@@ -761,7 +761,7 @@ const FeeCollection: React.FC = () => {
       {/* Fee Structure Collapsible */}
       <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
         <button onClick={() => setShowFeeStructure(!showFeeStructure)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-foreground hover:bg-muted/30 transition-colors">
-          Class Fee Structure 2025
+          Class Fee Structure 2026
           {showFeeStructure ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
         {showFeeStructure && (
