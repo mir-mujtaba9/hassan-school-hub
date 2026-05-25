@@ -13,6 +13,38 @@ const Login: React.FC = () => {
   const { setIsLoggedIn, setUserRole, setUserName, setAuthToken, setUserId, setUserEmail } = useAppContext();
   const navigate = useNavigate();
 
+  const applyLoginSuccess = (data: any, fallbackRole: 'admin' | 'teacher' | 'accountant') => {
+    const token =
+      (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
+      (data?.data && (data.data.token || data.data.accessToken));
+
+    const user = data?.user ?? data?.data?.user ?? null;
+    const roleFromResponse = String(
+      user?.role ?? user?.userRole ?? data?.role ?? data?.userRole ?? ''
+    ).toLowerCase();
+
+    const resolvedRole =
+      roleFromResponse === 'admin' || roleFromResponse === 'teacher' || roleFromResponse === 'accountant'
+        ? (roleFromResponse as 'admin' | 'teacher' | 'accountant')
+        : fallbackRole;
+
+    setIsLoggedIn(true);
+    setUserRole(resolvedRole);
+    setUserName(user?.full_name || user?.fullName || user?.name || email);
+    setUserEmail(String(user?.email ?? email));
+    setUserId(user?.id ? String(user.id) : user?._id ? String(user._id) : null);
+    if (token && typeof token === 'string') {
+      setAuthToken(token);
+    }
+
+    if (resolvedRole === 'admin') {
+      navigate('/admission');
+    } else {
+      // Teachers + accountants both land on Students by default.
+      navigate('/students');
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -38,24 +70,26 @@ const Login: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
-        const token =
-          (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
-          (data?.data && (data.data.token || data.data.accessToken));
-
-        const user = data?.user ?? data?.data?.user ?? null;
-        setIsLoggedIn(true);
-        setUserRole('admin');
-        setUserName(user?.full_name || user?.fullName || user?.name || email);
-        setUserEmail(String(user?.email ?? email));
-        setUserId(user?.id ? String(user.id) : user?._id ? String(user._id) : null);
-        if (token && typeof token === 'string') {
-          setAuthToken(token);
-        }
-        navigate('/admission');
+        applyLoginSuccess(data, 'admin');
         return;
       }
 
-      // If admin login fails, try teacher login
+      // If not admin, try accountant login
+      response = await fetch(`${baseUrl}/accountant-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        applyLoginSuccess(data, 'accountant');
+        return;
+      }
+
+      // If not accountant, try teacher login
       response = await fetch(`${baseUrl}/teacher-login`, {
         method: 'POST',
         headers: {
@@ -66,23 +100,7 @@ const Login: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
-        const token =
-          (data && (data.token || data.accessToken || data.jwt || data.authToken)) ||
-          (data?.data && (data.data.token || data.data.accessToken));
-
-        const user = data?.user ?? data?.data?.user ?? null;
-        setIsLoggedIn(true);
-        const roleFromResponse = String(
-          user?.role ?? user?.userRole ?? data?.role ?? data?.userRole ?? ''
-        ).toLowerCase();
-        setUserRole(roleFromResponse === 'accountant' ? 'accountant' : 'teacher');
-        setUserName(user?.full_name || user?.fullName || user?.name || email);
-        setUserEmail(String(user?.email ?? email));
-        setUserId(user?.id ? String(user.id) : user?._id ? String(user._id) : null);
-        if (token && typeof token === 'string') {
-          setAuthToken(token);
-        }
-        navigate('/students');
+        applyLoginSuccess(data, 'teacher');
         return;
       }
 
@@ -102,10 +120,13 @@ const Login: React.FC = () => {
     }
   };
 
-  const fillCredentials = (role: 'admin' | 'teacher') => {
+  const fillCredentials = (role: 'admin' | 'teacher' | 'accountant') => {
     if (role === 'admin') {
       setEmail('admin@hassan.edu');
       setPassword('admin123');
+    } else if (role === 'accountant') {
+      setEmail('accountant@hassan.edu');
+      setPassword('accountant123');
     } else {
       setEmail('teacher@hassan.edu');
       setPassword('teacher123');
@@ -164,9 +185,12 @@ const Login: React.FC = () => {
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
             <div className="relative flex justify-center text-xs"><span className="bg-card px-2 text-muted-foreground">Quick Login</span></div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button onClick={() => fillCredentials('admin')} className="px-3 py-2 border border-input rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
               Login as Admin
+            </button>
+            <button onClick={() => fillCredentials('accountant')} className="px-3 py-2 border border-input rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
+              Login as Accountant
             </button>
             <button onClick={() => fillCredentials('teacher')} className="px-3 py-2 border border-input rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
               Login as Teacher
