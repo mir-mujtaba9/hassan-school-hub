@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { Student, CLASS_FEE_MAP, DISCOUNT_OPTIONS, calcDiscountedFee, formatRs } from '@/data/students';
+import { buildStudentUpdatePayload, type StudentFormState } from '@/lib/studentUpdate';
 import { CalendarIcon, RotateCcw, Save, CheckCircle } from 'lucide-react';
 
 type ClassOption = {
@@ -35,7 +36,9 @@ const StudentAdmission: React.FC = () => {
   const isEdit = !!id;
   const existingStudent = isEdit ? students.find(s => s.id === id) : null;
 
-  const [form, setForm] = useState<Omit<Student, 'id'>>(emptyStudent);
+  const [form, setForm] = useState<StudentFormState>(emptyStudent);
+  const [initialStudent, setInitialStudent] = useState<StudentFormState | null>(null);
+  const [isLoadingStudent, setIsLoadingStudent] = useState(false);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [successInfo, setSuccessInfo] = useState({ name: '', cls: '', fee: 0 });
@@ -44,6 +47,108 @@ const StudentAdmission: React.FC = () => {
 
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
+
+  const normalizeDateToYMD = (value: string): string => {
+    const trimmed = value?.trim?.() ?? '';
+    if (!trimmed) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const isoPrefix = trimmed.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (isoPrefix) return isoPrefix[1];
+    const d = new Date(trimmed);
+    if (Number.isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const extractStudentFromResponse = (data: any): any => {
+    if (!data) return null;
+    if (Array.isArray(data)) return data[0] ?? null;
+    if (typeof data !== 'object') return null;
+    if (Array.isArray((data as any).students)) return (data as any).students[0] ?? null;
+    if (Array.isArray((data as any).data)) return (data as any).data[0] ?? null;
+    if ((data as any).student && typeof (data as any).student === 'object') return (data as any).student;
+    if ((data as any).data && typeof (data as any).data === 'object') return (data as any).data;
+    return data;
+  };
+
+  const mapApiStudentToFormState = (item: any): StudentFormState | null => {
+    if (!item || typeof item !== 'object') return null;
+
+    const baseMonthlyFee = Number(item.monthly_fee ?? item.monthlyFee ?? 0) || 0;
+    const discountLabel = typeof item.discount === 'string' ? item.discount : 'No Discount';
+    let discountedFee = baseMonthlyFee;
+    if (typeof item.discounted_fee === 'number') {
+      discountedFee = item.discounted_fee;
+    } else if (typeof item.discountedFee === 'number') {
+      discountedFee = item.discountedFee;
+    } else if (discountLabel !== 'No Discount') {
+      const pct = parseInt(discountLabel);
+      if (!Number.isNaN(pct)) {
+        discountedFee = Math.round(baseMonthlyFee * (1 - pct / 100));
+      }
+    }
+
+    const rawStatus: string = item.status ?? 'Active';
+    const status: 'Active' | 'Left' = rawStatus === 'Left' ? 'Left' : 'Active';
+
+    const classId = item.class_id != null ? String(item.class_id) : undefined;
+
+    return {
+      fullName: item.full_name ?? item.fullName ?? '',
+      fatherName: item.father_name ?? item.fatherName ?? '',
+      dateOfBirth: normalizeDateToYMD(item.date_of_birth ?? item.dateOfBirth ?? ''),
+      gender: item.gender ?? '',
+      religion: item.religion ?? 'Islam',
+      nationality: item.nationality ?? 'Pakistani',
+      placeOfBirth: item.place_of_birth ?? item.placeOfBirth ?? '',
+      motherTongue: item.mother_tongue ?? item.motherTongue ?? '',
+      studentPhone: item.student_phone ?? item.studentPhone ?? '',
+      fatherPhone: item.father_phone ?? item.fatherPhone ?? '',
+      motherName: item.mother_name ?? item.motherName ?? '',
+      motherPhone: item.mother_phone ?? item.motherPhone ?? '',
+      emergencyContactName: item.emergency_contact_name ?? '',
+      emergencyContactPhone: item.emergency_contact_phone ?? '',
+      homeAddress: item.home_address ?? item.homeAddress ?? '',
+      district: item.district ?? '',
+      tehsil: item.tehsil ?? '',
+      admissionDate: normalizeDateToYMD(item.admission_date ?? item.admissionDate ?? ''),
+      studentClass:
+        item.student_class ??
+        item.studentClass ??
+        item.class_name ??
+        item.className ??
+        item.class?.name ??
+        item.class?.class_name ??
+        item.class?.title ??
+        item.class?.label ??
+        (classId ? `Class ${classId}` : ''),
+      class_id: classId,
+      section: item.section ?? '',
+      rollNumber:
+        typeof item.roll_number === 'number'
+          ? item.roll_number
+          : typeof item.rollNumber === 'number'
+          ? item.rollNumber
+          : null,
+      previousSchool: item.previous_school ?? '',
+      previousClass: item.previous_class ?? '',
+      previousResult: item.previous_result ?? 'N/A',
+      monthlyFee: baseMonthlyFee,
+      discount: discountLabel || 'No Discount',
+      discountedFee,
+      discountReason: item.discount_reason ?? '',
+      bFormNumber: item.b_form_number ?? '',
+      fatherCnic: item.father_cnic ?? '',
+      previousTcNumber: item.previous_tc_number ?? '',
+      medicalCondition: item.medical_condition ?? '',
+      notes: item.notes ?? '',
+      status,
+      leavingDate: item.leaving_date,
+      leavingReason: item.leaving_reason,
+    };
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,12 +203,21 @@ const StudentAdmission: React.FC = () => {
 
   useEffect(() => {
     if (!classes.length) return;
-    if (selectedClassId) return;
+    if (selectedClassId) {
+      const cls = classes.find(c => c.id === selectedClassId);
+      if (cls && form.studentClass !== cls.name) {
+        setForm(prev => ({ ...prev, studentClass: cls.name, class_id: cls.id }));
+        setErrors(prev => ({ ...prev, studentClass: false }));
+      }
+      return;
+    }
+
     if (!form.studentClass) return;
 
     const matchByName = classes.find(c => c.name === form.studentClass);
     if (matchByName) {
       setSelectedClassId(matchByName.id);
+      setForm(prev => ({ ...prev, class_id: matchByName.id }));
       return;
     }
 
@@ -112,25 +226,58 @@ const StudentAdmission: React.FC = () => {
     const matchById = classes.find(c => c.id === idMatch[1]);
     if (matchById) {
       setSelectedClassId(matchById.id);
-      setForm(prev => ({ ...prev, studentClass: matchById.name }));
+      setForm(prev => ({ ...prev, studentClass: matchById.name, class_id: matchById.id }));
       setErrors(prev => ({ ...prev, studentClass: false }));
     }
   }, [classes, form.studentClass, selectedClassId]);
 
   useEffect(() => {
-    if (existingStudent) {
-      const { id: _id, ...rest } = existingStudent;
-      setForm(rest);
-    }
-  }, [existingStudent]);
+    // Fast local prefill while API request runs.
+    if (!isEdit) return;
+    if (!existingStudent) return;
+    if (initialStudent) return;
+
+    const { id: _id, ...rest } = existingStudent;
+    setForm(rest);
+    setInitialStudent(rest);
+    if (existingStudent.class_id) setSelectedClassId(String(existingStudent.class_id));
+  }, [existingStudent, initialStudent, isEdit]);
 
   useEffect(() => {
-    if (form.studentClass) {
-      const baseFee = CLASS_FEE_MAP[form.studentClass] || 0;
-      const discounted = calcDiscountedFee(baseFee, form.discount);
-      setForm(prev => ({ ...prev, monthlyFee: baseFee, discountedFee: discounted }));
-    }
-  }, [form.studentClass, form.discount]);
+    if (!isEdit || !id) return;
+
+    const controller = new AbortController();
+    const loadStudent = async () => {
+      try {
+        setIsLoadingStudent(true);
+        setApiError(null);
+
+        const headers: HeadersInit = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const response = await fetch(`${API_BASE_URL}/students/${id}`, { signal: controller.signal, headers });
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json().catch(() => null);
+        const raw = extractStudentFromResponse(data);
+        const mapped = mapApiStudentToFormState(raw);
+        if (!mapped) return;
+
+        setForm(mapped);
+        setInitialStudent(mapped);
+        if (mapped.class_id) setSelectedClassId(String(mapped.class_id));
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
+      } finally {
+        setIsLoadingStudent(false);
+      }
+    };
+
+    loadStudent();
+    return () => controller.abort();
+  }, [authToken, id, isEdit]);
 
   const update = (field: string, value: string | number | null) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -138,10 +285,22 @@ const StudentAdmission: React.FC = () => {
   };
 
   const validate = (): boolean => {
-    const required: (keyof typeof form)[] = ['fullName', 'fatherName', 'dateOfBirth', 'gender', 'fatherPhone', 'homeAddress', 'admissionDate', 'studentClass'];
+    const required: (keyof StudentFormState)[] = ['fullName', 'fatherName', 'dateOfBirth', 'gender', 'fatherPhone', 'homeAddress', 'admissionDate', 'studentClass'];
     const newErrors: Record<string, boolean> = {};
-    required.forEach(f => { if (!form[f]) newErrors[f] = true; });
-    if (form.discount !== 'No Discount' && !form.discountReason) newErrors['discountReason'] = true;
+
+    required.forEach(f => {
+      const current = (form as any)[f];
+      const initial = initialStudent ? (initialStudent as any)[f] : undefined;
+      const hasCurrent = !!current;
+      const clearedButInitialExists = isEdit && (current === '' || current === null) && !!initial;
+      if (!hasCurrent && !clearedButInitialExists) newErrors[String(f)] = true;
+    });
+
+    const discountChanged = initialStudent ? form.discount !== initialStudent.discount : true;
+    if (form.discount !== 'No Discount' && discountChanged && !String(form.discountReason ?? '').trim()) {
+      newErrors['discountReason'] = true;
+    }
+
     setErrors(newErrors);
     setApiError(null);
     return Object.keys(newErrors).length === 0;
@@ -154,34 +313,26 @@ const StudentAdmission: React.FC = () => {
 
     const baseUrl = `${API_BASE_URL}/students`;
     try {
-      const basePayload: Record<string, unknown> = {
-        full_name: form.fullName,
-        father_name: form.fatherName,
-        date_of_birth: form.dateOfBirth,
-        religion: form.religion,
-        gender: form.gender,
-        father_phone: form.fatherPhone,
-        home_address: form.homeAddress,
-        admission_date: form.admissionDate,
-        discount: form.discount,
-        discount_reason: form.discountReason || '',
-      };
-
-      if (selectedClassId) {
-        basePayload.class_id = selectedClassId;
-      } else {
-        const idMatch = form.studentClass.match(/^Class\s+(\d+)$/);
-        if (idMatch) basePayload.class_id = idMatch[1];
-      }
-
       if (isEdit && id) {
+        const snapshot = initialStudent ?? (existingStudent ? (({ id: _id, ...rest }) => rest)(existingStudent) : null);
+        if (!snapshot) {
+          setApiError('Unable to load student details. Please go back and try again.');
+          return;
+        }
+
+        const patch = buildStudentUpdatePayload(snapshot, form);
+        if (Object.keys(patch).length === 0) {
+          navigate('/students');
+          return;
+        }
+
         const headers: HeadersInit = { 'Content-Type': 'application/json' };
         if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
         const response = await fetch(`${baseUrl}/${id}`, {
           method: 'PUT',
           headers,
-          body: JSON.stringify(basePayload),
+          body: JSON.stringify(patch),
         });
 
         if (!response.ok) {
@@ -198,7 +349,26 @@ const StudentAdmission: React.FC = () => {
           return;
         }
 
-        setStudents(prev => prev.map(s => (s.id === id ? { ...s, ...form, id } : s)));
+        const updatedResponse = await response.json().catch(() => null);
+        const raw = extractStudentFromResponse(updatedResponse);
+        const mapped = mapApiStudentToFormState(raw);
+        if (mapped) {
+          const updatedStudent: Student = {
+            ...mapped,
+            id: String(raw?.id ?? raw?._id ?? id),
+            monthlyFee: mapped.monthlyFee ?? 0,
+            discountedFee: mapped.discountedFee ?? 0,
+          };
+          setStudents(prev => prev.map(s => (s.id === id ? updatedStudent : s)));
+        } else {
+          setStudents(prev =>
+            prev.map(s =>
+              s.id === id
+                ? { ...s, ...form, id, monthlyFee: form.monthlyFee ?? s.monthlyFee, discountedFee: form.discountedFee ?? s.discountedFee }
+                : s,
+            ),
+          );
+        }
         navigate('/students');
       } else {
         // Generate admission number like ADM2026-00123
@@ -206,6 +376,25 @@ const StudentAdmission: React.FC = () => {
         const year = now.getFullYear();
         const unique = String(now.getTime()).slice(-5);
         const admissionNo = `ADM${year}-${unique}`;
+
+        const basePayload: Record<string, unknown> = {
+          full_name: form.fullName,
+          father_name: form.fatherName,
+          date_of_birth: form.dateOfBirth,
+          religion: form.religion,
+          gender: form.gender,
+          father_phone: form.fatherPhone,
+          home_address: form.homeAddress,
+          admission_date: form.admissionDate,
+          discount: form.discount,
+          discount_reason: form.discountReason || '',
+        };
+
+        const classId = selectedClassId || form.class_id || (() => {
+          const idMatch = form.studentClass.match(/^Class\s+(\d+)$/);
+          return idMatch ? idMatch[1] : '';
+        })();
+        if (classId) basePayload.class_id = classId;
 
         const payload: Record<string, unknown> = {
           ...basePayload,
@@ -265,9 +454,17 @@ const StudentAdmission: React.FC = () => {
         }
 
         const newId = String(backendId);
-        setStudents(prev => [...prev, { ...form, id: newId }]);
+        setStudents(prev => [
+          ...prev,
+          {
+            ...form,
+            id: newId,
+            monthlyFee: form.monthlyFee ?? 0,
+            discountedFee: form.discountedFee ?? 0,
+          },
+        ]);
 
-        setSuccessInfo({ name: form.fullName, cls: form.studentClass, fee: form.discountedFee });
+        setSuccessInfo({ name: form.fullName, cls: form.studentClass, fee: form.discountedFee ?? 0 });
         setShowSuccess(true);
       }
     } catch (err) {
@@ -301,7 +498,10 @@ const StudentAdmission: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-foreground">{isEdit ? `Edit Student — ${existingStudent?.fullName}` : 'New Student Admission'}</h1>
+        <h1 className="text-xl font-bold text-foreground">
+          {isEdit ? `Edit Student — ${form.fullName || existingStudent?.fullName || ''}` : 'New Student Admission'}
+          {isEdit && isLoadingStudent ? ' (loading...)' : ''}
+        </h1>
         <p className="text-sm text-muted-foreground">Hassan Public School — Butmong</p>
       </div>
 
@@ -428,7 +628,16 @@ const StudentAdmission: React.FC = () => {
                   const newId = e.target.value;
                   setSelectedClassId(newId);
                   const cls = classes.find(c => c.id === newId);
-                  update('studentClass', cls?.name ?? '');
+                  const name = cls?.name ?? '';
+                  const baseFee = CLASS_FEE_MAP[name] || 0;
+                  setForm(prev => ({
+                    ...prev,
+                    studentClass: name,
+                    class_id: newId || undefined,
+                    monthlyFee: baseFee,
+                    discountedFee: calcDiscountedFee(baseFee, prev.discount),
+                  }));
+                  setErrors(prev => ({ ...prev, studentClass: false }));
                 }}
                 className={selectClass('studentClass')}
               >
@@ -479,34 +688,71 @@ const StudentAdmission: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-foreground">Monthly Fee (Rs.)</label>
-              <input type="number" value={form.monthlyFee || ''} onChange={e => update('monthlyFee', parseInt(e.target.value) || 0)} className={inputClass('')} />
+              <input
+                type="number"
+                value={form.monthlyFee ?? ''}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    update('monthlyFee', null);
+                    return;
+                  }
+                  const next = parseInt(raw);
+                  update('monthlyFee', Number.isNaN(next) ? 0 : next);
+                }}
+                className={inputClass('')}
+              />
               {form.studentClass && <p className="text-xs text-muted-foreground mt-1">Standard fee for {form.studentClass}: {formatRs(CLASS_FEE_MAP[form.studentClass] || 0)}</p>}
             </div>
             <div>
               <label className="text-sm font-medium text-foreground">Fee Discount</label>
-              <select value={form.discount} onChange={e => update('discount', e.target.value)} className={selectClass('')}>
+              <select
+                value={form.discount}
+                onChange={e => {
+                  const newDiscount = e.target.value;
+                  setForm(prev => ({
+                    ...prev,
+                    discount: newDiscount,
+                    discountedFee: calcDiscountedFee(prev.monthlyFee ?? 0, newDiscount),
+                  }));
+                  setErrors(prev => ({ ...prev, discountReason: false }));
+                }}
+                className={selectClass('')}
+              >
                 {DISCOUNT_OPTIONS.map(d => <option key={d}>{d}</option>)}
               </select>
             </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Final Monthly Fee (Rs.)</label>
+              <input
+                type="number"
+                value={form.discountedFee ?? ''}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    update('discountedFee', null);
+                    return;
+                  }
+                  const next = parseInt(raw);
+                  update('discountedFee', Number.isNaN(next) ? 0 : next);
+                }}
+                className={inputClass('')}
+              />
+              {form.discount !== 'No Discount' && (
+                <p className="text-xs text-muted-foreground mt-1">After {form.discount} discount</p>
+              )}
+            </div>
             {form.discount !== 'No Discount' && (
-              <>
-                <div>
-                  <label className="text-sm font-medium text-foreground">Discounted Amount</label>
-                  <div className="px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg text-sm text-primary font-medium">
-                    {formatRs(form.discountedFee)} after {form.discount} discount
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground">Reason for Discount *</label>
-                  <input value={form.discountReason} onChange={e => update('discountReason', e.target.value)} className={inputClass('discountReason')} placeholder="e.g. Orphan / Staff child / Financial hardship / Merit" />
-                  <ErrorMsg field="discountReason" />
-                </div>
-              </>
+              <div>
+                <label className="text-sm font-medium text-foreground">Reason for Discount *</label>
+                <input value={form.discountReason} onChange={e => update('discountReason', e.target.value)} className={inputClass('discountReason')} placeholder="e.g. Orphan / Staff child / Financial hardship / Merit" />
+                <ErrorMsg field="discountReason" />
+              </div>
             )}
             <div className="md:col-span-2">
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
                 <p className="text-sm text-muted-foreground">Final Monthly Fee</p>
-                <p className="text-2xl font-bold text-primary">{formatRs(form.discountedFee)}<span className="text-sm font-normal text-muted-foreground">/month</span></p>
+                <p className="text-2xl font-bold text-primary">{formatRs(form.discountedFee ?? 0)}<span className="text-sm font-normal text-muted-foreground">/month</span></p>
               </div>
             </div>
           </div>
