@@ -113,6 +113,7 @@ const StudentsList: React.FC = () => {
   const isAccountant = userRole === 'accountant';
   const isTeacher = userRole === 'teacher';
   const [search, setSearch] = useState('');
+  const [classFilterId, setClassFilterId] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
@@ -220,6 +221,7 @@ const StudentsList: React.FC = () => {
         params.set('limit', String(ITEMS_PER_PAGE));
 
         if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+        if (classFilterId) params.set('class_id', classFilterId);
         if (statusFilter !== 'All') params.set('status', statusFilter);
 
         const headers: HeadersInit = {};
@@ -274,7 +276,7 @@ const StudentsList: React.FC = () => {
 
     fetchStudentsPage();
     return () => controller.abort();
-  }, [page, debouncedSearch, statusFilter, authToken]);
+  }, [page, debouncedSearch, classFilterId, statusFilter, authToken]);
 
   const paged = rows;
   const totalPages = pagination.totalPages;
@@ -356,6 +358,16 @@ const StudentsList: React.FC = () => {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9 pr-3 py-2 border border-input rounded-lg text-sm w-full sm:w-64 focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-card" placeholder="Search by name, class or father name" />
           </div>
+          <select
+            value={classFilterId}
+            onChange={e => { setClassFilterId(e.target.value); setPage(1); }}
+            className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none"
+          >
+            <option value="">All Classes</option>
+            {classes.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="px-3 py-2 border border-input rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary outline-none">
             <option>All</option>
             <option>Active</option>
@@ -418,8 +430,8 @@ const StudentsList: React.FC = () => {
                       </div>
                       <p className="text-sm font-medium text-foreground">No records match your search</p>
                       <p className="text-xs text-muted-foreground">Try adjusting your filters or search term</p>
-                      {(search || statusFilter !== 'All') && (
-                        <button onClick={() => { setSearch(''); setStatusFilter('All'); setPage(1); }} className="mt-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
+                      {(search || classFilterId || statusFilter !== 'All') && (
+                        <button onClick={() => { setSearch(''); setClassFilterId(''); setStatusFilter('All'); setPage(1); }} className="mt-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
                           Reset Filters
                         </button>
                       )}
