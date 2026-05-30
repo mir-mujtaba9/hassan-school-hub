@@ -12,8 +12,26 @@ type ClassOption = {
   name: string;
 };
 
+function useDebouncedValue<T>(value: T, delayMs = 300) {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+type StudentsPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+};
+
 const StudentsList: React.FC = () => {
-  const { students, setStudents, feeRecords, userRole, authToken } = useAppContext();
+  const { setStudents, feeRecords, userRole, authToken } = useAppContext();
   const navigate = useNavigate();
   const isAdmin = userRole === 'admin';
   const isAccountant = userRole === 'accountant';
@@ -24,12 +42,23 @@ const StudentsList: React.FC = () => {
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
   const [viewTab, setViewTab] = useState('personal');
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
-  const [remoteIds, setRemoteIds] = useState<Set<string> | null>(null);
-  const [isRemoteLoading, setIsRemoteLoading] = useState(false);
-  const [remoteError, setRemoteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassOption[]>([]);
+
+  const [rows, setRows] = useState<Student[]>([]);
+  const [pagination, setPagination] = useState<StudentsPagination>({
+    page: 1,
+    limit: ITEMS_PER_PAGE,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+  const [isStudentsLoading, setIsStudentsLoading] = useState(false);
+  const [studentsError, setStudentsError] = useState<string | null>(null);
+
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -103,90 +132,83 @@ const StudentsList: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!search) {
-      setRemoteIds(null);
-      setRemoteError(null);
-      return;
-    }
-
     const controller = new AbortController();
-    const fetchStudents = async () => {
+
+    const fetchStudentsPage = async () => {
       try {
-        setIsRemoteLoading(true);
-        setRemoteError(null);
+        setIsStudentsLoading(true);
+        setStudentsError(null);
 
         const params = new URLSearchParams();
-        params.set('search', search);
-        params.set('limit', '500');
-        const url = `${import.meta.env.VITE_API_URL}/students?${params.toString()}`;
+        params.set('page', String(page));
+        params.set('limit', String(ITEMS_PER_PAGE));
+
+        if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+        if (statusFilter !== 'All') params.set('status', statusFilter);
 
         const headers: HeadersInit = {};
         if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-        const response = await fetch(url, { signal: controller.signal, headers });
-        if (!response.ok) {
-          setRemoteError('Unable to search students on server. Showing local results.');
-          setRemoteIds(null);
-          return;
-        }
-
-        const data = await response.json();
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray((data as any)?.students)
-          ? (data as any).students
-          : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : [];
-
-        if (!Array.isArray(list)) {
-          setRemoteIds(null);
-          return;
-        }
-
-        const ids = new Set<string>();
-        list.forEach((item: any) => {
-          const id = item?.id ?? item?._id;
-          if (id != null) ids.add(String(id));
+        const res = await fetch(`${API_BASE_URL}/students?${params.toString()}`, {
+          signal: controller.signal,
+          headers,
         });
 
-        setRemoteIds(ids.size > 0 ? ids : null);
-      } catch (err) {
-        if ((err as any)?.name === 'AbortError') return;
-        setRemoteError('Unable to search students on server. Showing local results.');
-        setRemoteIds(null);
+        if (!res.ok) {
+          setRows([]);
+          setPagination(p => ({ ...p, total: 0, totalPages: 1, hasNextPage: false, hasPrevPage: false }));
+          setStudentsError('Unable to load students from server.');
+          return;
+        }
+
+        const json = await res.json();
+        const list = Array.isArray(json?.data) ? json.data : [];
+        const pg = json?.pagination;
+
+        setRows(list);
+
+        if (pg && typeof pg === 'object') {
+          setPagination({
+            page: Number((pg as any).page || 1),
+            limit: Number((pg as any).limit || ITEMS_PER_PAGE),
+            total: Number((pg as any).total || 0),
+            totalPages: Number((pg as any).totalPages || 1),
+            hasNextPage: Boolean((pg as any).hasNextPage),
+            hasPrevPage: Boolean((pg as any).hasPrevPage),
+          });
+        } else {
+          setPagination({
+            page,
+            limit: ITEMS_PER_PAGE,
+            total: list.length,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPrevPage: false,
+          });
+        }
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return;
+        setRows([]);
+        setStudentsError('Unable to load students from server.');
       } finally {
-        setIsRemoteLoading(false);
+        setIsStudentsLoading(false);
       }
     };
 
-    fetchStudents();
-
+    fetchStudentsPage();
     return () => controller.abort();
-  }, [search, authToken]);
+  }, [page, debouncedSearch, statusFilter, authToken]);
 
-  const visibleStudents = useMemo(() => {
-    if (!remoteIds) return students;
-    return students.filter(s => remoteIds.has(String(s.id)));
-  }, [students, remoteIds]);
-
-  const filtered = useMemo(() => {
-    return visibleStudents.filter(s => {
-      const matchSearch = !search || s.fullName.toLowerCase().includes(search.toLowerCase()) || s.fatherName.toLowerCase().includes(search.toLowerCase()) || getClassDisplayName(s.studentClass).toLowerCase().includes(search.toLowerCase());
-      const matchStatus = statusFilter === 'All' || s.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [visibleStudents, search, statusFilter, classNameById]);
-
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paged = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const paged = rows;
+  const totalPages = pagination.totalPages;
+  const total = pagination.total;
 
   const stats = useMemo(() => ({
-    total: visibleStudents.length,
-    active: visibleStudents.filter(s => s.status === 'Active').length,
-    left: visibleStudents.filter(s => s.status === 'Left').length,
-    newThisMonth: visibleStudents.filter(s => { const d = new Date(s.admissionDate); const now = new Date(); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length,
-  }), [visibleStudents]);
+    total,
+    active: paged.filter(s => s.status === 'Active').length,
+    left: paged.filter(s => s.status === 'Left').length,
+    newThisMonth: paged.filter(s => { const d = new Date(s.admissionDate); const now = new Date(); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length,
+  }), [paged, total]);
 
   const handleDelete = async (student: Student) => {
     if (!student) return;
@@ -217,6 +239,7 @@ const StudentsList: React.FC = () => {
       }
 
       setStudents(prev => prev.filter(s => s.id !== student.id));
+      setRows(prev => prev.filter(s => s.id !== student.id));
       setDeleteTarget(null);
     } catch (err) {
       setDeleteError('Unable to delete student from server. Please try again.');
@@ -249,7 +272,7 @@ const StudentsList: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-foreground">Students</h1>
-          <span className="px-2.5 py-0.5 bg-muted text-muted-foreground text-xs rounded-full font-medium">{visibleStudents.length} Students{isRemoteLoading ? ' (searching...)' : ''}</span>
+          <span className="px-2.5 py-0.5 bg-muted text-muted-foreground text-xs rounded-full font-medium">{total} Students{isStudentsLoading ? ' (loading…)': ''}</span>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative">
@@ -269,9 +292,9 @@ const StudentsList: React.FC = () => {
         </div>
       </div>
 
-      {remoteError && (
+      {studentsError && (
         <p className="mb-3 text-xs text-destructive bg-destructive/5 border border-destructive/30 rounded-md px-3 py-1.5">
-          {remoteError}
+          {studentsError}
         </p>
       )}
 
@@ -319,7 +342,7 @@ const StudentsList: React.FC = () => {
                       <p className="text-sm font-medium text-foreground">No records match your search</p>
                       <p className="text-xs text-muted-foreground">Try adjusting your filters or search term</p>
                       {(search || statusFilter !== 'All') && (
-                        <button onClick={() => { setSearch(''); setStatusFilter('All'); }} className="mt-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
+                        <button onClick={() => { setSearch(''); setStatusFilter('All'); setPage(1); }} className="mt-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
                           Reset Filters
                         </button>
                       )}
@@ -373,10 +396,10 @@ const StudentsList: React.FC = () => {
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-          <p className="text-sm text-muted-foreground">Showing {filtered.length === 0 ? 0 : (page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} students</p>
+          <p className="text-sm text-muted-foreground">Showing {total === 0 ? 0 : (page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, total)} of {total} students</p>
           <div className="flex items-center gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="p-1.5 border border-input rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"><ChevronLeft size={16} /></button>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="p-1.5 border border-input rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"><ChevronRight size={16} /></button>
+            <button disabled={!pagination.hasPrevPage || isStudentsLoading} onClick={() => setPage(p => Math.max(1, p - 1))} className="p-1.5 border border-input rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"><ChevronLeft size={16} /></button>
+            <button disabled={!pagination.hasNextPage || isStudentsLoading} onClick={() => setPage(p => p + 1)} className="p-1.5 border border-input rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"><ChevronRight size={16} /></button>
           </div>
         </div>
       </div>

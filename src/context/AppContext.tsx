@@ -60,28 +60,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    }, [authToken]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const loadStudentsFromApi = async () => {
       try {
         const headers: HeadersInit = {};
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`;
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const PAGE_LIMIT = 500; // <= backend cap (your backend clamps to max 1000)
+        let currentPage = 1;
+
+        const allItems: any[] = [];
+        const maxPagesSafety = 200; // prevents infinite loops if backend misbehaves
+
+        while (currentPage <= maxPagesSafety) {
+          const params = new URLSearchParams();
+          params.set('page', String(currentPage));
+          params.set('limit', String(PAGE_LIMIT));
+
+          const response = await fetch(`${API_BASE_URL}/students?${params.toString()}`, {
+            headers,
+            signal: controller.signal,
+            cache: 'no-store',
+          });
+
+          if (!response.ok) return;
+
+          const data = await response.json();
+
+          const list = Array.isArray(data)
+            ? data
+            : Array.isArray((data as any)?.students)
+            ? (data as any).students
+            : Array.isArray((data as any)?.data)
+            ? (data as any).data
+            : [];
+
+          if (!Array.isArray(list) || list.length === 0) break;
+
+          allItems.push(...list);
+
+          const pg = (data as any)?.pagination;
+          const hasNext = Boolean(pg?.hasNextPage);
+          const totalPages = Number(pg?.totalPages || 0);
+
+          if (!hasNext) break;
+          if (totalPages && currentPage >= totalPages) break;
+
+          currentPage += 1;
         }
 
-        const response = await fetch(`${API_BASE_URL}/students?limit=200`, { headers });
-        if (!response.ok) return;
+        if (!Array.isArray(allItems) || allItems.length === 0) return;
 
-        const data = await response.json();
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray((data as any)?.students)
-          ? (data as any).students
-          : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : [];
-
-        if (!Array.isArray(list)) return;
-
-        const mapped: Student[] = list.map((item: any, index: number) => {
+        const mapped: Student[] = allItems.map((item: any, index: number) => {
           const id = String(item.id ?? item._id ?? index + 1);
 
           const baseMonthlyFee = Number(item.monthly_fee ?? item.monthlyFee ?? 0) || 0;
@@ -156,12 +187,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         setStudents(mapped);
-      } catch {
-        // If backend is unavailable, keep initial demo data
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        // keep initial demo data on failure
       }
     };
 
     loadStudentsFromApi();
+    return () => controller.abort();
   }, [authToken]);
 
   useEffect(() => {
